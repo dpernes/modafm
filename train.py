@@ -15,7 +15,7 @@ from utils import show_images
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Train FCN in Trancos dataset.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(description='Train FCN in Trancos dataset in cross-camera setting.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-m', '--model_path', default='./fcn.pth', type=str, metavar='', help='model file (output of train)')
     parser.add_argument('-d', '--data_path', default='/ctm-hdd-pool01/DB/TRANCOS_v3', type=str, metavar='', help='data directory path')
     parser.add_argument('-t', '--target_cam', default=1, type=int, metavar='', help='target camera ID')
@@ -29,7 +29,7 @@ def main():
     parser.add_argument('--weight_decay', default=0., type=float, metavar='', help='weight decay regularization')
     parser.add_argument('--use_cuda', default=True, type=int, metavar='', help='use CUDA capable GPU')
     parser.add_argument('--use_visdom', default=False, type=int, metavar='', help='use Visdom to visualize plots')
-    parser.add_argument('--visdom_env', default='FCN_train', type=str, metavar='', help='Visdom environment name')
+    parser.add_argument('--visdom_env', default='MSDA_bsln_train', type=str, metavar='', help='Visdom environment name')
     parser.add_argument('--visdom_port', default=8888, type=int, metavar='', help='Visdom port')
     parser.add_argument('--n2show', default=8, type=int, metavar='', help='number of examples to show in Visdom in each epoch')
     parser.add_argument('--vis_shape', nargs=2, default=[120, 160], type=int, metavar='', help='shape of the images shown in Visdom')
@@ -133,6 +133,7 @@ def main():
 
             # copy the tensors to GPU (if applicable)
             Xsrc, mask_src, density_src, count_src = Xsrc.to(device), mask_src.to(device), density_src.to(device), count_src.to(device)
+            Xtgt, mask_tgt = Xtgt.to(device), mask_tgt.to(device)
 
             # forward pass through the model
             density_pred_src, count_pred_src = model(Xsrc, mask=mask_src)
@@ -184,7 +185,7 @@ def main():
             # show a few training examples (images + density maps) from source domain
             Xsrc *= mask_src  # show the active region only
             X, density, count = Xsrc.cpu().numpy(), density_src.cpu().numpy(), count_src.cpu().numpy()
-            density_pred, count_pred = density_pred.detach().cpu().numpy(), count_pred.detach().cpu().numpy()
+            density_pred, count_pred = density_pred_src.detach().cpu().numpy(), count_pred_src.detach().cpu().numpy()
             n2show = min(args['n2show'], X.shape[0])  # show args['n2show'] images at most
             show_images(img_plt, 'train gt', X[0:n2show], density[0:n2show], count[0:n2show], shape=args['vis_shape'])
             show_images(img_plt, 'train pred', X[0:n2show], density_pred[0:n2show], count_pred[0:n2show], shape=args['vis_shape'])
@@ -257,7 +258,7 @@ def main():
             # show a few validation examples (images + density maps) from source domain
             Xsrc *= mask_src  # show the active region only
             X, density, count = Xsrc.cpu().numpy(), density_src.cpu().numpy(), count_src.cpu().numpy()
-            density_pred, count_pred = density_pred.cpu().numpy(), count_pred.cpu().numpy()
+            density_pred, count_pred = density_pred_src.cpu().numpy(), count_pred_src.cpu().numpy()
             n2show = min(args['n2show'], X.shape[0])  # show args['n2show'] images at most
             show_images(img_plt, 'valid src gt', X[0:n2show], density[0:n2show], count[0:n2show], shape=args['vis_shape'])
             show_images(img_plt, 'valid src pred', X[0:n2show], density_pred[0:n2show], count_pred[0:n2show], shape=args['vis_shape'])
