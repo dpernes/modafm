@@ -18,10 +18,10 @@ def main():
     parser = argparse.ArgumentParser(description='Train FCN in Trancos dataset in cross-camera setting.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-m', '--model_path', default='./fcn.pth', type=str, metavar='', help='model file (output of train)')
     parser.add_argument('-d', '--data_path', default='/ctm-hdd-pool01/DB/TRANCOS_v3', type=str, metavar='', help='data directory path')
-    parser.add_argument('-t', '--target_cam', default=1, type=int, metavar='', help='target camera ID')
+    parser.add_argument('-t', '--target_cam', default=0, type=int, metavar='', help='target camera ID')
     parser.add_argument('--valid', default=0.2, type=float, metavar='', help='fraction of the training data for validation')
     parser.add_argument('--lr', default=1e-3, type=float, metavar='', help='learning rate')
-    parser.add_argument('--epochs', default=500, type=int, metavar='', help='number of training epochs')
+    parser.add_argument('--epochs', default=150, type=int, metavar='', help='number of training epochs')
     parser.add_argument('--batch_size', default=32, type=int, metavar='', help='batch size')
     parser.add_argument('--size_red', default=4, type=int, metavar='', help='size reduction factor to be applied to the images')
     parser.add_argument('--lambda', default=1e-4, type=float, metavar='', help='trade-off between density estimation and vehicle count losses (see eq. 7 in the paper)')
@@ -58,7 +58,8 @@ def main():
     valid_transf = NP_T.ToTensor()  # no data augmentation in validation
 
     # instantiate the dataset
-    source_cams = list(range(14)).remove(args['target_cam'])
+    source_cams = list(range(14))
+    source_cams.remove(args['target_cam'])
     train_src_data = Trancos(train=True, path=args['data_path'], size_red=args['size_red'],
         transform=train_transf, gamma=args['gamma'], get_cameras=True, cameras=source_cams)
     train_tgt_data = Trancos(train=True, path=args['data_path'], size_red=args['size_red'],
@@ -93,11 +94,11 @@ def main():
 
     if valid_src_data:
         valid_src_loader = DataLoader(valid_src_data,
-                                  batch_size=args['batch_size'],
-                                  shuffle=False)  # no need to shuffle in validation
+                                      batch_size=args['batch_size'],
+                                      shuffle=False)  # no need to shuffle in validation
         valid_tgt_loader = DataLoader(valid_tgt_data,
-                                  batch_size=args['batch_size'],
-                                  shuffle=False)  # no need to shuffle in validation
+                                      batch_size=args['batch_size'],
+                                      shuffle=False)  # no need to shuffle in validation
         valid_loader = MergeLoaders(valid_src_loader, valid_tgt_loader)
     else:
         valid_loader = None
