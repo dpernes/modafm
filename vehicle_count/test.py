@@ -43,7 +43,6 @@ def main():
     # instantiate the dataset
     source_cams = list(range(14))
     source_cams.remove(args['target_cam'])
-    print('source_cams', source_cams)
     test_src_data = Trancos(train=False, path=args['data_path'], size_red=args['size_red'],
         transform=NP_T.ToTensor(), gamma=args['gamma'], get_cameras=True, cameras=source_cams)
     test_tgt_data = Trancos(train=False, path=args['data_path'], size_red=args['size_red'],
@@ -65,8 +64,8 @@ def main():
         samples = {'X': [], 'density': [], 'count': [], 'density_pred': [], 'count_pred': []}
         nsaved = 0
 
-    ### SOURCE DOMAIN ###
 
+    print('SOURCE DOMAIN')
     # do inference and print statistics
     model.eval()  # set model to evaluation mode
     density_loss = 0.
@@ -96,7 +95,7 @@ def main():
             samples['count_pred'].append(count_pred[0:n2save].cpu().numpy())
             nsaved += n2save
 
-        print('Testing (source domain)... ({:.0f}% done)'.format(100.*(i+1)/len(test_src_loader)),
+        print('Testing... ({:.0f}% done)'.format(100.*(i+1)/len(test_src_loader)),
               flush=True, end='\r')
     print()
     density_loss /= len(test_src_data)
@@ -104,7 +103,7 @@ def main():
     count_err /= len(test_src_data)
     t1 = time.time()
 
-    print('Test statistics (source domain):')
+    print('Test statistics:')
     print('density loss: {:.3f} | count loss: {:.3f} | count error: {:.3f}'
           .format(density_loss, count_loss, count_err))
     print('time: {:.0f} seconds'.format(t1-t0))
@@ -115,14 +114,16 @@ def main():
         for key in samples:
             samples[key] = np.concatenate(samples[key], axis=0)
 
-        show_images(img_plt, 'test gt source', samples['X'], samples['density'], samples['count'], shape=args['vis_shape'])
-        show_images(img_plt, 'test pred source', samples['X'], samples['density_pred'], samples['count_pred'], shape=args['vis_shape'])
+        show_images(img_plt, 'test gt source', samples['X'],
+            samples['density'], samples['count'], shape=args['vis_shape'])
+        show_images(img_plt, 'test pred source', samples['X'],
+            samples['density_pred'], samples['count_pred'], shape=args['vis_shape'])
 
         samples = {'X': [], 'density': [], 'count': [], 'density_pred': [], 'count_pred': []}
         nsaved = 0
 
-    ### TARGET DOMAIN ###
 
+    print('TARGET DOMAIN')
     # do inference and print statistics
     model.eval()  # set model to evaluation mode
     density_loss = 0.
@@ -152,7 +153,7 @@ def main():
             samples['count_pred'].append(count_pred[0:n2save].cpu().numpy())
             nsaved += n2save
 
-        print('Testing (target domain)... ({:.0f}% done)'.format(100.*(i+1)/len(test_tgt_loader)),
+        print('Testing... ({:.0f}% done)'.format(100.*(i+1)/len(test_tgt_loader)),
               flush=True, end='\r')
     print()
     density_loss /= len(test_tgt_data)
@@ -160,7 +161,7 @@ def main():
     count_err /= len(test_tgt_data)
     t1 = time.time()
 
-    print('Test statistics (target domain):')
+    print('Test statistics:')
     print('density loss: {:.3f} | count loss: {:.3f} | count error: {:.3f}'
           .format(density_loss, count_loss, count_err))
     print('time: {:.0f} seconds'.format(t1-t0))
@@ -171,8 +172,10 @@ def main():
         for key in samples:
             samples[key] = np.concatenate(samples[key], axis=0)
 
-        show_images(img_plt, 'test gt target', samples['X'], samples['density'], samples['count'], shape=args['vis_shape'])
-        show_images(img_plt, 'test pred target', samples['X'], samples['density_pred'], samples['count_pred'], shape=args['vis_shape'])
+        show_images(img_plt, 'test gt target', samples['X'],
+            samples['density'], samples['count'], shape=args['vis_shape'])
+        show_images(img_plt, 'test pred target', samples['X'],
+            samples['density_pred'], samples['count_pred'], shape=args['vis_shape'])
 
 if __name__ == '__main__':
     main()

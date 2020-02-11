@@ -4,12 +4,12 @@ import time
 
 import numpy as np
 import torch
-import torchvision.transforms as T
 from torch.utils.data import DataLoader, Subset
+import torchvision.transforms as T
 
 import np_transforms as NP_T
 import plotter
-from datasets import Trancos, MergeLoaders
+from datasets import MergeLoaders, Trancos
 from models import FCN_rLSTM
 from utils import show_images
 
