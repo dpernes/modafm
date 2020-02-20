@@ -217,7 +217,7 @@ def mdan_fm_train_routine(train_loader, test_pub_loader, test_priv_loader, loss_
                                          for i in range(len(train_loader.sources))])
             fm_loss = fixmatch_loss(yt_logits, yt_aug_logits)
             if cfg['mode'] == 'dynamic':
-                loss = torch.log(torch.sum(torch.exp(cfg['gamma']*(class_losses + cfg['mu']*unif_losses))))/cfg['gamma']
+                loss = torch.log(torch.sum(torch.exp(cfg['gamma']*(class_losses + cfg['mu']*domain_losses))))/cfg['gamma']
             else:
                 loss = torch.max(class_losses + cfg['mu']*domain_losses)
             loss += cfg['lambda']*fm_loss
