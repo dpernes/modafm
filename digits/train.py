@@ -9,13 +9,14 @@ from torch.utils.data import Subset, DataLoader
 import torchvision.transforms as T
 
 from datasets import MNIST, MNIST_M, SVHN, SynthDigits
-from routines import mdan_train_routine, mdan_unif_train_routine, mdan_fm_train_routine, mdan_unif_fm_train_routine
+from routines import (mdan_train_routine, mdan_unif_train_routine, mdan_fm_train_routine,
+                      mdan_unif_fm_train_routine, mixmdan_train_routine, mixmdan_fm_train_routine)
 from utils import MSDA_Loader
 import plotter
 
 def main():
     parser = argparse.ArgumentParser(description='Domain adaptation experiments with digits datasets.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-m', '--model', default='MDAN', type=str, metavar='', help='model type (\'MDAN\' / \'MDANU\' / \'MDANFM\' / \'MDANUFM\')')
+    parser.add_argument('-m', '--model', default='MDAN', type=str, metavar='', help='model type (\'MDAN\' / \'MDANU\' / \'MDANFM\' / \'MDANUFM\' / \'MixMDAN\' / \'MixMDANFM\')')
     parser.add_argument('-d', '--data_path', default='/ctm-hdd-pool01/DB/', type=str, metavar='', help='data directory path')
     parser.add_argument('-t', '--target', default='MNIST', type=str, metavar='', help='target domain (\'MNIST\' / \'MNIST_M\' / \'SVHN\' / \'SynthDigits\')')
     parser.add_argument('-o', '--output', default='msda.pth', type=str, metavar='', help='model file (output of train)')
@@ -23,6 +24,7 @@ def main():
     parser.add_argument('--n_images', default=20000, type=int, metavar='', help='number of images from each domain')
     parser.add_argument('--mu', type=float, default=1e-2, help="hyperparameter of the coefficient for the domain adversarial loss")
     parser.add_argument('--gamma', type=float, default=10., help="hyperparameter of the dynamic loss")
+    parser.add_argument('--beta', type=float, default=0.2, help="hyperparameter of the non-sparsity regularization")
     parser.add_argument('--lambda', type=float, default=1e-1, help="hyperparameter of the FixMatch loss")
     parser.add_argument('--n_rand_aug', type=int, default=2, help="N parameter of RandAugment")
     parser.add_argument('--m_min_rand_aug', type=int, default=3, help="minimum M parameter of RandAugment")
@@ -103,6 +105,10 @@ def main():
         model = mdan_fm_train_routine(train_loader, test_pub_loader, test_priv_loader, loss_plt, args)
     elif args['model'] == 'MDANUFM':
         model = mdan_unif_fm_train_routine(train_loader, test_pub_loader, test_priv_loader, loss_plt, args)
+    elif args['model'] == 'MixMDAN':
+        model = mixmdan_train_routine(train_loader, test_pub_loader, test_priv_loader, loss_plt, args)
+    elif args['model'] == 'MixMDANFM':
+        model = mixmdan_fm_train_routine(train_loader, test_pub_loader, test_priv_loader, loss_plt, args)
     else:
         raise ValueError('Unknown model {}'.format(args['model']))
 

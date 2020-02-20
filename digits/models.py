@@ -88,6 +88,65 @@ class MDANet(nn.Module):
         return y
 
 
+class MixMDANet(nn.Module):
+    def __init__(self, n_domains=3):
+        super(MixMDANet, self).__init__()
+
+        self.feat_ext = nn.Sequential(OrderedDict([
+            ('Conv1', nn.Conv2d(3, 64, kernel_size=3, padding=1)),
+            ('ReLU1', nn.ReLU()),
+            ('MaxPool1', nn.MaxPool2d(2)),
+            ('Conv2', nn.Conv2d(64, 128, kernel_size=3, padding=1)),
+            ('ReLU2', nn.ReLU()),
+            ('MaxPool2', nn.MaxPool2d(2)),
+            ('Conv3', nn.Conv2d(128, 256, kernel_size=3, padding=1)),
+            ('ReLU3', nn.ReLU()),
+        ]))
+
+        self.task_class = nn.Sequential(OrderedDict([
+            ('MaxPool3', nn.MaxPool2d(2)),
+            ('Conv4', nn.Conv2d(256, 256, kernel_size=3, padding=1)),
+            ('ReLU4', nn.ReLU()),
+            ('Flatten', Flatten()),
+            ('FC1', nn.Linear(4096, 2048)),  # 4096 = (256*32*32)/(2^3*2^3)
+            ('ReLU5', nn.ReLU()),
+            ('FC2', nn.Linear(2048, 1024)),
+            ('ReLU6', nn.ReLU()),
+            ('FC3', nn.Linear(1024, 10)),
+        ]))
+
+        self.grad_reverse = GradientReversalLayer()
+        self.domain_class = nn.Sequential(
+            nn.MaxPool2d(2),
+            Flatten(),
+            nn.Linear(4096, 2048),  # 4096 = (256*32*32)/(2^3*2^3)
+            nn.ReLU(),
+            nn.Linear(2048, 2048),
+            nn.ReLU(),
+            nn.Linear(2048, 2),
+        )
+
+    def forward(self, Xs, Xt):
+        ys, ds = [], []
+        for i in range(len(Xs)):
+            # process source data
+            Z = self.feat_ext(Xs[i])
+            ys.append(self.task_class(Z))
+            ds.append(self.domain_class(self.grad_reverse(Z)))
+
+        # process target data
+        Z = self.feat_ext(Xt)
+        dt = self.domain_class(self.grad_reverse(Z))
+
+        return ys, ds, dt
+
+    def inference(self, X):
+        Z = self.feat_ext(X)
+        y = self.task_class(Z)
+
+        return y
+
+
 if __name__ == '__main__':
     N = 32
     model = MDANet()
