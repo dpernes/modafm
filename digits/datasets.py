@@ -4,7 +4,6 @@ import random
 import torch
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import datasets
-import torchvision.transforms as T
 import torchvision.transforms.functional as TF
 from PIL import Image
 from scipy.io import loadmat
@@ -12,7 +11,7 @@ from skimage import io
 
 
 class MNIST(Dataset):
-    def __init__(self, train=True, path='./MNIST', transform=None):
+    def __init__(self, path, train=True, transform=None):
         self.data = datasets.MNIST(path[0:-6], train=train, download=True)
         self.transform = transform
 
@@ -92,6 +91,7 @@ class SynthDigits(Dataset):
         return img, self.labels[i]
 
 if __name__ == '__main__':
+    import torchvision.transforms as T
     import matplotlib.gridspec as gridspec
     import matplotlib.pyplot as plt
     from utils import CombineLoaders

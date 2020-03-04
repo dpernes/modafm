@@ -1,35 +1,18 @@
-from collections import OrderedDict
+import sys
+sys.path.append('..')
 
+from collections import OrderedDict
 import torch
 from torch import nn
 
-
-class GradientReversal(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x, lbd):
-        ctx.save_for_backward(lbd)
-        return x
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        lbd, = ctx.saved_tensors
-        return -lbd*grad_output, None
-
-class GradientReversalLayer(nn.Module):
-    def __init__(self, lbd=1.):
-        super(GradientReversalLayer, self).__init__()
-        self.lbd = nn.Parameter(torch.FloatTensor([lbd]), requires_grad=False)
-        self.grad_reverse = GradientReversal()
-
-    def forward(self, x):
-        return self.grad_reverse.apply(x, self.lbd)
+from gradient_reversal import GradientReversalLayer
 
 class Flatten(nn.Module):
     def forward(self, X):
         return X.reshape(X.shape[0], -1)
 
 class MDANet(nn.Module):
-    def __init__(self, n_domains=3):
+    def __init__(self, n_domains):
         super(MDANet, self).__init__()
 
         self.feat_ext = nn.Sequential(OrderedDict([
@@ -89,7 +72,7 @@ class MDANet(nn.Module):
 
 
 class MixMDANet(nn.Module):
-    def __init__(self, n_domains=3):
+    def __init__(self):
         super(MixMDANet, self).__init__()
 
         self.feat_ext = nn.Sequential(OrderedDict([
@@ -149,7 +132,7 @@ class MixMDANet(nn.Module):
 
 if __name__ == '__main__':
     N = 32
-    model = MDANet()
+    model = MDANet(3)
     Xs = [torch.zeros((N, 3, 32, 32)) for _ in range(3)]
     Xt = torch.zeros((N, 3, 32, 32))
     yt = model.inference(Xt)

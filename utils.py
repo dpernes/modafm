@@ -32,10 +32,10 @@ class CombineLoaders:
         return tuple(batches)
 
 class MSDA_Loader:
-    def __init__(self, datasets, target, batch_size=8, shuffle=True, device='cpu'):
+    def __init__(self, datasets, target, batch_size=8, shuffle=True, num_workers=0, device='cpu'):
         # the first dataloader is for the target domain, the remaining are for the source domains
-        dataloaders = ([DataLoader(datasets[target], batch_size=batch_size, shuffle=shuffle)]
-                       +[DataLoader(ds, batch_size=batch_size, shuffle=shuffle)
+        dataloaders = ([DataLoader(datasets[target], batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)]
+                       +[DataLoader(ds, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
                          for (ds_name, ds) in datasets.items() if ds_name != target])
 
         self.sources = [ds_name for ds_name in datasets if ds_name != target]

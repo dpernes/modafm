@@ -1,3 +1,6 @@
+import sys
+sys.path.append('..')
+
 import argparse
 import os
 import random
@@ -5,14 +8,16 @@ from copy import deepcopy
 
 import numpy as np
 import torch
+from torch import nn, optim
 from torch.utils.data import Subset, DataLoader
 import torchvision.transforms as T
 
 from datasets import MNIST, MNIST_M, SVHN, SynthDigits
+from models import MDANet, MixMDANet
 from routines import (mdan_train_routine, mdan_unif_train_routine, mdan_fm_train_routine,
                       mdan_unif_fm_train_routine, mixmdan_train_routine, mixmdan_fm_train_routine)
 from utils import MSDA_Loader
-import plotter
+
 
 def main():
     parser = argparse.ArgumentParser(description='Domain adaptation experiments with digits datasets.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -50,8 +55,9 @@ def main():
         random.seed(args['seed'])
         np.random.seed(seed=args['seed'])
         torch.manual_seed(args['seed'])
+        torch.cuda.manual_seed(args['seed'])
 
-    device = 'cuda:0' if (args['use_cuda'] and torch.cuda.is_available()) else 'cpu'
+    device = 'cuda' if (args['use_cuda'] and torch.cuda.is_available()) else 'cpu'
     print('device:', device)
 
     if 'FM' in args['model']:
@@ -90,25 +96,42 @@ def main():
     train_loader = MSDA_Loader(datasets, args['target'], batch_size=args['batch_size'], shuffle=True, device=device)
     test_pub_loader = DataLoader(test_pub_set, batch_size=4*args['batch_size'])
     test_priv_loader = DataLoader(test_priv_set, batch_size=4*args['batch_size'])
+    valid_loaders = {'target pub': test_pub_loader, 'target priv': test_priv_loader}
     print('source domains:', train_loader.sources)
 
-    if args['use_visdom']:
-        loss_plt = plotter.VisdomLossPlotter(env_name=args['visdom_env'], port=args['visdom_port'])
-    else:
-        loss_plt = None
-
     if args['model'] == 'MDAN':
-        model = mdan_train_routine(train_loader, test_pub_loader, test_priv_loader, loss_plt, args)
+        model = MDANet(len(train_loader.sources)).to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=args['lr'], weight_decay=args['weight_decay'])
+        mdan_train_routine(model, optimizer, train_loader, valid_loaders, args)
     elif args['model'] == 'MDANU':
-        model = mdan_unif_train_routine(train_loader, test_pub_loader, test_priv_loader, loss_plt, args)
+        model = MDANet(len(train_loader.sources)).to(device)
+        model.grad_reverse = nn.ModuleList([nn.Identity() for _ in range(len(model.domain_class))])  # remove grad reverse
+        task_optim = optim.Adadelta(list(model.feat_ext.parameters())+list(model.task_class.parameters()),
+                                    lr=args['lr'], weight_decay=args['weight_decay'])
+        adv_optim = optim.Adadelta(model.domain_class.parameters(),
+                                   lr=args['lr'], weight_decay=args ['weight_decay'])
+        optimizers = (task_optim, adv_optim)
+        mdan_unif_train_routine(model, optimizers, train_loader, valid_loaders, args)
     elif args['model'] == 'MDANFM':
-        model = mdan_fm_train_routine(train_loader, test_pub_loader, test_priv_loader, loss_plt, args)
+        model = MDANet(len(train_loader.sources)).to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=args['lr'], weight_decay=args['weight_decay'])
+        mdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, args)
     elif args['model'] == 'MDANUFM':
-        model = mdan_unif_fm_train_routine(train_loader, test_pub_loader, test_priv_loader, loss_plt, args)
+        model = MDANet(len(train_loader.sources)).to(device)
+        task_optim = optim.Adadelta(list(model.feat_ext.parameters())+list(model.task_class.parameters()),
+                                    lr=args['lr'], weight_decay=args['weight_decay'])
+        adv_optim = optim.Adadelta(model.domain_class.parameters(),
+                                   lr=args['lr'], weight_decay=args ['weight_decay'])
+        optimizers = (task_optim, adv_optim)
+        mdan_unif_fm_train_routine(model, optimizer, train_loader, valid_loaders, args)
     elif args['model'] == 'MixMDAN':
-        model = mixmdan_train_routine(train_loader, test_pub_loader, test_priv_loader, loss_plt, args)
+        model = MixMDANet().to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=args['lr'], weight_decay=args['weight_decay'])
+        mixmdan_train_routine(model, optimizer, train_loader, valid_loaders, args)
     elif args['model'] == 'MixMDANFM':
-        model = mixmdan_fm_train_routine(train_loader, test_pub_loader, test_priv_loader, loss_plt, args)
+        model = MixMDANet().to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=args['lr'], weight_decay=args['weight_decay'])
+        mixmdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, args)
     else:
         raise ValueError('Unknown model {}'.format(args['model']))
 

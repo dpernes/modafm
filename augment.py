@@ -173,6 +173,7 @@ def augment_list():  # 16 oeprations and their ranges
         (Sharpness, 0.1, 1.9, 'mean'),
         (ShearX, 0., 0.3, 'min'),
         (ShearY, 0., 0.3, 'min'),
+        (Flip, 0, 1, 'min'),
         # (CutoutAbs, 0, 40, 'min'),
         (TranslateX, -0.45, 0.45, 'mean'),
         (TranslateY, -0.45, 0.45, 'mean'),
@@ -228,12 +229,17 @@ class CutoutDefault(object):
 
 
 class RandAugment:
-    def __init__(self, n, m, cutout=10, is_tensor=True):
+    def __init__(self, n, m, cutout=10, exclusions=None, is_tensor=True):
         self.n = n
         self.m = m      # [0, 30]
         self.augment_list = augment_list()
         self.is_tensor = is_tensor
         self.cutout = cutout
+
+        if exclusions is not None:
+            for i, (aug_transf, _, _, _) in enumerate(self.augment_list):
+                if aug_transf in exclusions:
+                    del self.augment_list[i]
 
     def __call__(self, img):
         if self.is_tensor:
