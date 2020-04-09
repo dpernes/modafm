@@ -1,6 +1,21 @@
+import numpy as np
+import random
 import torch
+from torch import optim
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
+from copy import deepcopy
+import sys
+
+class Logger:
+    def __init__(self, verbosity, file=sys.stdout):
+        self.verbosity = verbosity
+        self.file = file
+
+    def print(self, *objects, sep=' ', end='\n', flush=False, level=0):
+        if(level >= 2 - self.verbosity):
+            print(*objects, sep=sep, end=end, file=self.file, flush=flush)
+
 
 class CombineLoaders:
     def __init__(self, loaders):
@@ -62,6 +77,25 @@ def fixmatch_loss(logits, aug_logits, min_conf=0.9):
     loss_per_example = F.cross_entropy(aug_logits, pseudo_labels, reduction='none')
     loss = torch.mean(mask*loss_per_example, dim=0)
     return loss
+
+def loguniform(low, high):
+    return np.power(10, np.random.uniform(np.log10(low), np.log10(high)))
+
+def reset_model(model):
+    for layer in model.modules():
+        if hasattr(layer, 'reset_parameters'):
+            layer.reset_parameters()
+
+def eval_accuracy(model, dataloader, device='cpu'):
+    n_correct, N = 0, 0
+    for X, y in dataloader:
+        N += len(y)
+        X, y = X.to(device), y.to(device)
+        with torch.no_grad():
+            y_logits = model.inference(X)
+        y_preds = torch.argmax(y_logits, dim=1)
+        n_correct += torch.sum((y_preds == y).float())
+    return n_correct/N
 
 def save_checkpoint(epoch, model, optimizer, lr_sched, name='checkpoint.pth'):
     if isinstance(model, list):  # in case we are saving multiple models

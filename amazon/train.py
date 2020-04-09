@@ -2,6 +2,8 @@ import sys
 sys.path.append('..')
 
 import argparse
+from configparser import ConfigParser
+import ast
 import random
 
 import numpy as np
@@ -11,8 +13,8 @@ from torch.utils.data import Subset, DataLoader
 
 from dataset import Amazon
 from models import MDANet, MixMDANet
-from routines import mdan_train_routine, mixmdan_train_routine
-from utils import MSDA_Loader
+from routines import mdan_train_routine, mixmdan_train_routine, mixmdan_mlp_fm_train_routine
+from utils import MSDA_Loader, Logger
 
 
 def main():
@@ -21,13 +23,14 @@ def main():
     parser.add_argument('-d', '--data_path', default='/ctm-hdd-pool01/DB/Amazon', type=str, metavar='', help='data directory path')
     parser.add_argument('-t', '--target', default='books', type=str, metavar='', help='target domain (\'books\' / \'dvd\' / \'electronics\' / \'kitchen\')')
     parser.add_argument('-o', '--output', default='msda.pth', type=str, metavar='', help='model file (output of train)')
-    parser.add_argument('--mode', default='dynamic', type=str, metavar='', help='mode of combination rule (\'dynamic\' / \'minmax\')')
+    parser.add_argument('--icfg', default=None, type=str, metavar='', help='config file (overrides args)')
     parser.add_argument('--n_samples', default=2000, type=int, metavar='', help='number of samples from each domain')
     parser.add_argument('--n_features', default=5000, type=int, metavar='', help='number of features to use')
     parser.add_argument('--mu', type=float, default=1e-2, help="hyperparameter of the coefficient for the domain adversarial loss")
-    parser.add_argument('--gamma', type=float, default=10., help="hyperparameter of the dynamic loss")
-    parser.add_argument('--beta', type=float, default=0.2, help="hyperparameter of the non-sparsity regularization")
+    parser.add_argument('--beta', type=float, default=2e-1, help="hyperparameter of the non-sparsity regularization")
     parser.add_argument('--lambda', type=float, default=1e-1, help="hyperparameter of the FixMatch loss")
+    parser.add_argument('--min_dropout', type=int, default=2e-1, help="minimum dropout rate")
+    parser.add_argument('--max_dropout', type=int, default=8e-1, help="maximum dropout rate")
     parser.add_argument('--weight_decay', default=0., type=float, metavar='', help='hyperparameter of weight decay regularization')
     parser.add_argument('--lr', default=1e0, type=float, metavar='', help='learning rate')
     parser.add_argument('--epochs', default=15, type=int, metavar='', help='number of training epochs')
@@ -37,50 +40,66 @@ def main():
     parser.add_argument('--use_visdom', default=False, type=int, metavar='', help='use Visdom to visualize plots')
     parser.add_argument('--visdom_env', default='amazon_train', type=str, metavar='', help='Visdom environment name')
     parser.add_argument('--visdom_port', default=8888, type=int, metavar='', help='Visdom port')
+    parser.add_argument('--verbosity', default=2, type=int, metavar='', help='log verbosity level')
     parser.add_argument('--seed', default=42, type=int, metavar='', help='random seed')
     args = vars(parser.parse_args())
 
-    device = 'cuda' if (args['use_cuda'] and torch.cuda.is_available()) else 'cpu'
-    print('device:', device)
+    # override args with icfg (if provided)
+    cfg = args.copy()
+    if cfg['icfg'] is not None:
+        cv_parser = ConfigParser()
+        cv_parser.read(cfg['icfg'])
+        cv_param_names = []
+        for key, val in cv_parser.items('main'):
+            cfg[key] = ast.literal_eval(val)
+            cv_param_names.append(key)
 
-    # dump args to a txt file for your records
-    with open(args['output'] + '.txt', 'w') as f:
-        f.write(str(args)+'\n')
+    # dump cfg to a txt file for your records
+    with open(cfg['output'] + '.txt', 'w') as f:
+        f.write(str(cfg)+'\n')
+
+    device = 'cuda' if (cfg['use_cuda'] and torch.cuda.is_available()) else 'cpu'
+    log = Logger(cfg['verbosity'])
+    log.print('device:', device, level=0)
 
     # use a fixed random seed for reproducibility purposes
-    if args['seed'] > 0:
+    if cfg['seed'] > 0:
         random.seed(args['seed'])
         np.random.seed(seed=args['seed'])
         torch.manual_seed(args['seed'])
         torch.cuda.manual_seed(args['seed'])
 
-    products = ['books', 'dvd', 'electronics', 'kitchen']
+    domains = ['books', 'dvd', 'electronics', 'kitchen']
     datasets = {}
-    for product in products:
-        datasets[product] = Amazon('./amazon.npz', product, dimension=args['n_features'], transform=torch.from_numpy)
-        indices = random.sample(range(len(datasets[product])), args['n_samples'])
-        if product == args['target']:
-            priv_indices = list(set(range(len(datasets[args['target']]))) - set(indices))
-            test_priv_set = Subset(datasets[args['target']], priv_indices)
-        datasets[product] = Subset(datasets[product], indices)
-    test_pub_set = datasets[args['target']]
+    for domain in domains:
+        datasets[domain] = Amazon('./amazon.npz', domain, dimension=cfg['n_features'], transform=torch.from_numpy)
+        indices = random.sample(range(len(datasets[domain])), cfg['n_samples'])
+        if domain == cfg['target']:
+            priv_indices = list(set(range(len(datasets[cfg['target']]))) - set(indices))
+            test_priv_set = Subset(datasets[cfg['target']], priv_indices)
+        datasets[domain] = Subset(datasets[domain], indices)
+    test_pub_set = datasets[cfg['target']]
 
-    train_loader = MSDA_Loader(datasets, args['target'], batch_size=args['batch_size'], shuffle=True, device=device)
-    test_pub_loader = DataLoader(test_pub_set, batch_size=4*args['batch_size'])
-    test_priv_loader = DataLoader(test_priv_set, batch_size=4*args['batch_size'])
+    train_loader = MSDA_Loader(datasets, cfg['target'], batch_size=cfg['batch_size'], shuffle=True, device=device)
+    test_pub_loader = DataLoader(test_pub_set, batch_size=4*cfg['batch_size'])
+    test_priv_loader = DataLoader(test_priv_set, batch_size=4*cfg['batch_size'])
     valid_loaders = {'pub target': test_pub_loader, 'priv target': test_priv_loader}
-    print('source domains:', train_loader.sources)
+    log.print('target domain:', cfg['target'], 'source domains:', train_loader.sources, level=1)
 
-    if args['model'] == 'MDAN':
-        model = MDANet(input_dim=args['n_features'], n_classes=2, n_domains=len(train_loader.sources)).to(device)
-        optimizer = optim.Adadelta(model.parameters(), lr=args['lr'], weight_decay=args['weight_decay'])
-        mdan_train_routine(model, optimizer, train_loader, valid_loaders, args)
-    elif args['model'] == 'MixMDAN':
-        model = MixMDANet(input_dim=args['n_features'], n_classes=2).to(device)
-        optimizer = optim.Adadelta(model.parameters(), lr=args['lr'], weight_decay=args['weight_decay'])
-        mixmdan_train_routine(model, optimizer, train_loader, valid_loaders, args)
+    if cfg['model'] == 'MDAN':
+        model = MDANet(input_dim=cfg['n_features'], n_classes=2, n_domains=len(train_loader.sources)).to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
+        mdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+    elif cfg['model'] == 'MixMDAN':
+        model = MixMDANet(input_dim=cfg['n_features'], n_classes=2).to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=args['lr'], weight_decay=cfg['weight_decay'])
+        mixmdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+    elif cfg['model'] == 'MixMDANFM':
+        model = MixMDANet(input_dim=cfg['n_features'], n_classes=2).to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
+        mixmdan_mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
 
-    torch.save(model.state_dict(), args['output'])
+    torch.save(model.state_dict(), cfg['output'])
 
 if __name__ == '__main__':
     main()

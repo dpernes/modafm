@@ -7,20 +7,28 @@ import torch.nn as nn
 from gradient_reversal import GradientReversalLayer
 
 class MDANet(nn.Module):
-    def __init__(self, input_dim, n_classes, n_domains):
+    def __init__(self, input_dim, n_classes, n_domains, dropout_rate=0.):
         super(MDANet, self).__init__()
         self.feat_ext = nn.Sequential(OrderedDict([
+            ('Dropout1', nn.Dropout(dropout_rate)),
             ('Linear1', nn.Linear(input_dim, 1000)),
             ('ReLU1', nn.ReLU()),
+            ('Dropout2', nn.Dropout(dropout_rate)),
             ('Linear2', nn.Linear(1000, 500)),
             ('ReLU2', nn.ReLU()),
             ('Linear3', nn.Linear(500, 100)),
-            ('ReLU3', nn.ReLU())
+            ('ReLU3', nn.ReLU()),
+            ('Dropout3', nn.Dropout(dropout_rate)),
         ]))
 
         self.task_class = nn.Linear(100, n_classes)
         self.grad_reverse = nn.ModuleList([GradientReversalLayer() for _ in range(n_domains)])
         self.domain_class = nn.ModuleList([nn.Linear(100, 2) for _ in range(n_domains)])
+
+    def set_dropout_rate(self, p):
+        for name, layer in self.named_modules():
+            if 'dropout' in name.lower():
+                layer.p = p
 
     def forward(self, Xs, Xt):
         ys, ds, dt = [], [], []
@@ -44,29 +52,28 @@ class MDANet(nn.Module):
 
 
 class MixMDANet(nn.Module):
-    def __init__(self, input_dim, n_classes):
+    def __init__(self, input_dim, n_classes, dropout_rate=0.):
         super(MixMDANet, self).__init__()
         self.feat_ext = nn.Sequential(OrderedDict([
+            ('Dropout1', nn.Dropout(dropout_rate)),
             ('Linear1', nn.Linear(input_dim, 1000)),
             ('ReLU1', nn.ReLU()),
+            ('Dropout2', nn.Dropout(dropout_rate)),
             ('Linear2', nn.Linear(1000, 500)),
             ('ReLU2', nn.ReLU()),
             ('Linear3', nn.Linear(500, 100)),
-            ('ReLU3', nn.ReLU())
+            ('ReLU3', nn.ReLU()),
+            ('Dropout3', nn.Dropout(dropout_rate)),
         ]))
 
         self.task_class = nn.Linear(100, n_classes)
         self.grad_reverse = GradientReversalLayer()
         self.domain_class = nn.Linear(100, 2)
 
-        self.feat_ext = nn.Sequential(OrderedDict([
-            ('Linear1', nn.Linear(input_dim, 500)),
-            ('ReLU1', nn.ReLU()),
-        ]))
-
-        self.task_class = nn.Linear(500, n_classes)
-        self.grad_reverse = GradientReversalLayer()
-        self.domain_class = nn.Linear(500, 2)
+    def set_dropout_rate(self, p):
+        for name, layer in self.named_modules():
+            if 'dropout' in name.lower():
+                layer.p = p
 
     def forward(self, Xs, Xt):
         ys, ds = [], []

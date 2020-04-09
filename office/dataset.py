@@ -41,7 +41,7 @@ if __name__ == '__main__':
     import matplotlib.gridspec as gridspec
     import matplotlib.pyplot as plt
     import time
-    from augment import RandAugment
+    from augment import RandAugment, Flip
 
     normalize = T.Normalize(mean=[0.485, 0.456, 0.406],
                             std=[0.229, 0.224, 0.225])
@@ -57,7 +57,7 @@ if __name__ == '__main__':
     for X, y in loader:
         m_aug = np.random.randint(3, 10+1)
         aug_transf = lambda batch: torch.stack([
-            RandAugment(2, m_aug, cutout=int(0.3*X.shape[2]))(img)
+            RandAugment(2, m_aug, cutout=int(0.3*X.shape[2]), exclusions=None)(img)
             for img in batch])
         X_aug = aug_transf(X)
 
