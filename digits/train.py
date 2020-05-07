@@ -15,21 +15,20 @@ from torch.utils.data import Subset, DataLoader
 import torchvision.transforms as T
 
 from datasets import MNIST, MNIST_M, SVHN, SynthDigits
-from models import MDANet, MixMDANet
-from routines import (mdan_train_routine, mdan_unif_train_routine, mdan_fm_train_routine,
-                      mdan_unif_fm_train_routine, mixmdan_train_routine, mixmdan_fm_train_routine)
+from models import SimpleCNN, MDANet, MixMDANet
+from routines import (fs_train_routine, fm_train_routine, dann_train_routine, mdan_train_routine, mdan_unif_train_routine,
+                      mdan_fm_train_routine, mdan_unif_fm_train_routine, mixmdan_train_routine, mixmdan_fm_train_routine)
 from utils import MSDA_Loader, Logger
 from augment import Flip
 
 
 def main():
     parser = argparse.ArgumentParser(description='Domain adaptation experiments with digits datasets.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-m', '--model', default='MDAN', type=str, metavar='', help='model type (\'MDAN\' / \'MDANU\' / \'MDANFM\' / \'MDANUFM\' / \'MixMDAN\' / \'MixMDANFM\')')
+    parser.add_argument('-m', '--model', default='MDAN', type=str, metavar='', help='model type (\'FS\' / \'MDAN\' / \'MixMDAN\' / \'FM\' / \'MixMDANFM\')')
     parser.add_argument('-d', '--data_path', default='/ctm-hdd-pool01/DB/', type=str, metavar='', help='data directory path')
     parser.add_argument('-t', '--target', default='MNIST', type=str, metavar='', help='target domain (\'MNIST\' / \'MNIST_M\' / \'SVHN\' / \'SynthDigits\')')
     parser.add_argument('-o', '--output', default='msda.pth', type=str, metavar='', help='model file (output of train)')
     parser.add_argument('--icfg', default=None, type=str, metavar='', help='config file (overrides args)')
-    parser.add_argument('--mode', default='dynamic', type=str, metavar='', help='mode of combination rule (\'dynamic\' / \'minmax\')')
     parser.add_argument('--n_images', default=20000, type=int, metavar='', help='number of images from each domain')
     parser.add_argument('--mu', type=float, default=1e-2, help="hyperparameter of the coefficient for the domain adversarial loss")
     parser.add_argument('--beta', type=float, default=0.2, help="hyperparameter of the non-sparsity regularization")
@@ -42,6 +41,7 @@ def main():
     parser.add_argument('--epochs', default=30, type=int, metavar='', help='number of training epochs')
     parser.add_argument('--batch_size', default=8, type=int, metavar='', help='batch size (per domain)')
     parser.add_argument('--checkpoint', default=0, type=int, metavar='', help='number of epochs between saving checkpoints (0 disables checkpoints)')
+    parser.add_argument('--eval_target', default=False, type=int, metavar='', help='evaluate target during training')
     parser.add_argument('--use_cuda', default=True, type=int, metavar='', help='use CUDA capable GPU')
     parser.add_argument('--use_visdom', default=False, type=int, metavar='', help='use Visdom to visualize plots')
     parser.add_argument('--visdom_env', default='digits_train', type=str, metavar='', help='Visdom environment name')
@@ -75,7 +75,7 @@ def main():
     log = Logger(cfg['verbosity'])
     log.print('device:', device, level=0)
 
-    if 'FM' in cfg['model']:
+    if ('FS' in cfg['model']) or ('FM' in cfg['model']):
         # weak data augmentation (small rotation + small translation)
         data_aug = T.Compose([
             T.RandomAffine(5, translate=(0.125, 0.125)),
@@ -90,7 +90,7 @@ def main():
     datasets['MNIST_M'] = MNIST_M(train=True, path=os.path.join(cfg['data_path'], 'MNIST_M'), transform=data_aug)
     datasets['SVHN'] = SVHN(train=True, path=os.path.join(cfg['data_path'], 'SVHN'), transform=data_aug)
     datasets['SynthDigits'] = SynthDigits(train=True, path=os.path.join(cfg['data_path'], 'SynthDigits'), transform=data_aug)
-    if 'FM' in cfg['model']:
+    if ('FS' in cfg['model']) or ('FM' in cfg['model']):
         test_set = deepcopy(datasets[cfg['target']])
         test_set.transform = T.ToTensor()  # no data augmentation in test
     else:
@@ -111,10 +111,34 @@ def main():
     train_loader = MSDA_Loader(datasets, cfg['target'], batch_size=cfg['batch_size'], shuffle=True, device=device)
     test_pub_loader = DataLoader(test_pub_set, batch_size=4*cfg['batch_size'])
     test_priv_loader = DataLoader(test_priv_set, batch_size=4*cfg['batch_size'])
-    valid_loaders = {'target pub': test_pub_loader, 'target priv': test_priv_loader}
-    log.print('target domain:', cfg['target'], 'source domains:', train_loader.sources, level=0)
+    valid_loaders = ({'target pub': test_pub_loader, 'target priv': test_priv_loader}
+                     if cfg['eval_target'] else None)
+    log.print('target domain:', cfg['target'], '| source domains:', train_loader.sources, level=0)
 
-    if cfg['model'] == 'MDAN':
+    if cfg['model'] == 'FS':
+        model = SimpleCNN().to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
+        if valid_loaders is not None:
+            del valid_loaders['target pub']
+        fs_train_routine(model, optimizer, test_pub_loader, valid_loaders, cfg)
+    elif cfg['model'] == 'FM':
+        model = SimpleCNN().to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
+        cfg['excl_transf'] = [Flip]
+        fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+    elif cfg['model'] == 'DANNS':
+        for src in train_loader.sources:
+            model = MixMDANet().to(device)
+            optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
+            dataset_ss = {src: datasets[src], cfg['target']: datasets[cfg['target']]}
+            train_loader = MSDA_Loader(dataset_ss, cfg['target'], batch_size=cfg['batch_size'], shuffle=True, device=device)
+            dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+            torch.save(model.state_dict(), cfg['output']+'_'+src)
+    elif cfg['model'] == 'DANNM':
+        model = MixMDANet().to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
+        dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+    elif cfg['model'] == 'MDAN':
         model = MDANet(len(train_loader.sources)).to(device)
         optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
         mdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
@@ -124,7 +148,7 @@ def main():
         task_optim = optim.Adadelta(list(model.feat_ext.parameters())+list(model.task_class.parameters()),
                                     lr=cfg['lr'], weight_decay=cfg['weight_decay'])
         adv_optim = optim.Adadelta(model.domain_class.parameters(),
-                                   lr=cfg['lr'], weight_decay=cfg ['weight_decay'])
+                                   lr=cfg['lr'], weight_decay=cfg['weight_decay'])
         optimizers = (task_optim, adv_optim)
         mdan_unif_train_routine(model, optimizers, train_loader, valid_loaders, cfg)
     elif cfg['model'] == 'MDANFM':
@@ -136,7 +160,7 @@ def main():
         task_optim = optim.Adadelta(list(model.feat_ext.parameters())+list(model.task_class.parameters()),
                                     lr=cfg['lr'], weight_decay=cfg['weight_decay'])
         adv_optim = optim.Adadelta(model.domain_class.parameters(),
-                                   lr=cfg['lr'], weight_decay=cfg ['weight_decay'])
+                                   lr=cfg['lr'], weight_decay=cfg['weight_decay'])
         optimizers = (task_optim, adv_optim)
         cfg['excl_transf'] = [Flip]
         mdan_unif_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
@@ -152,7 +176,8 @@ def main():
     else:
         raise ValueError('Unknown model {}'.format(cfg['model']))
 
-    torch.save(model.state_dict(), cfg['output'])
+    if cfg['model'] != 'DANNS':
+        torch.save(model.state_dict(), cfg['output'])
 
 if __name__ == '__main__':
     main()

@@ -10,24 +10,25 @@ from copy import deepcopy
 import numpy as np
 import torch
 from torch import optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, SubsetRandomSampler
 import torchvision.transforms as T
 import torchvision.transforms.functional as TF
 
 from dataset import Office
-from models import MDANet, MixMDANet
-from routines import mdan_train_routine, mixmdan_train_routine, mixmdan_fm_train_routine
+from models import SimpleCNN, MDANet, MixMDANet
+from routines import (fs_train_routine, fm_train_routine, dann_train_routine, mdan_train_routine,
+                      mdan_train_routine, mixmdan_train_routine, mixmdan_fm_train_routine)
 from utils import MSDA_Loader, Logger
 
 
 def main():
     parser = argparse.ArgumentParser(description='Domain adaptation experiments with Office dataset.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-m', '--model', default='MDAN', type=str, metavar='', help='model type (\'MDAN\' / \'MDANU\' / \'MDANFM\' / \'MDANUFM\' / \'MixMDAN\' / \'MixMDANFM\')')
+    parser.add_argument('-m', '--model', default='MDAN', type=str, metavar='', help='model type (\'FS\' \'MDAN\' / \'MDANU\' / \'MDANFM\' / \'MDANUFM\' / \'MixMDAN\' / \'MixMDANFM\')')
     parser.add_argument('-d', '--data_path', default='/ctm-hdd-pool01/DB/OfficeRsz', type=str, metavar='', help='data directory path')
     parser.add_argument('-t', '--target', default='amazon', type=str, metavar='', help='target domain (\'amazon\' / \'dslr\' / \'webcam\')')
     parser.add_argument('-o', '--output', default='msda.pth', type=str, metavar='', help='model file (output of train)')
     parser.add_argument('--icfg', default=None, type=str, metavar='', help='config file (overrides args)')
-    parser.add_argument('--mode', default='dynamic', type=str, metavar='', help='mode of combination rule (\'dynamic\' / \'minmax\')')
+    parser.add_argument('--arch', default='resnet50', type=str, metavar='', help='network architecture (\'resnet50\' / \'alexnet\'')
     parser.add_argument('--mu', type=float, default=1e-2, help="hyperparameter of the coefficient for the domain adversarial loss")
     parser.add_argument('--beta', type=float, default=0., help="hyperparameter of the non-sparsity regularization")
     parser.add_argument('--lambda', type=float, default=1e-1, help="hyperparameter of the FixMatch loss")
@@ -37,8 +38,9 @@ def main():
     parser.add_argument('--weight_decay', default=0., type=float, metavar='', help='hyperparameter of weight decay regularization')
     parser.add_argument('--lr', default=1e-1, type=float, metavar='', help='learning rate')
     parser.add_argument('--epochs', default=15, type=int, metavar='', help='number of training epochs')
-    parser.add_argument('--batch_size', default=20, type=int, metavar='', help='batch size (per domain)')
+    parser.add_argument('--batch_size', default=8, type=int, metavar='', help='batch size (per domain)')
     parser.add_argument('--checkpoint', default=0, type=int, metavar='', help='number of epochs between saving checkpoints (0 disables checkpoints)')
+    parser.add_argument('--eval_target', default=False, type=int, metavar='', help='evaluate target during training')
     parser.add_argument('--use_cuda', default=True, type=int, metavar='', help='use CUDA capable GPU')
     parser.add_argument('--use_visdom', default=False, type=int, metavar='', help='use Visdom to visualize plots')
     parser.add_argument('--visdom_env', default='office_train', type=str, metavar='', help='Visdom environment name')
@@ -100,57 +102,182 @@ def main():
     else:
         test_set = datasets[cfg['target']]
 
-    train_loader = MSDA_Loader(datasets, cfg['target'], batch_size=cfg['batch_size'], shuffle=True, num_workers=0, device=device)
-    test_loader = DataLoader(test_set, batch_size=3*cfg['batch_size'])
-    valid_loaders = {'pub target': test_loader}
-    log.print('target domain:', cfg['target'], 'source domains:', train_loader.sources, level=1)
+    if cfg['model'] != 'FS':
+        train_loader = MSDA_Loader(datasets, cfg['target'], batch_size=cfg['batch_size'], shuffle=True, num_workers=0, device=device)
+        if cfg['eval_target']:
+            valid_loaders = {'target pub': DataLoader(test_set, batch_size=3*cfg['batch_size'])}
+        else:
+            valid_loaders = None
+        log.print('target domain:', cfg['target'], 'source domains:', train_loader.sources, level=1)
+    else:
+        train_indices = random.sample(range(len(datasets[cfg['target']])), int(0.8*len(datasets[cfg['target']])))
+        test_indices = list(set(range(len(datasets[cfg['target']]))) - set(train_indices))
+        train_loader = DataLoader(
+            datasets[cfg['target']],
+            batch_size=cfg['batch_size'],
+            sampler=SubsetRandomSampler(train_indices))
+        test_loader = DataLoader(
+            datasets[cfg['target']],
+            batch_size=cfg['batch_size'],
+            sampler=SubsetRandomSampler(test_indices))
+        log.print('target domain:', cfg['target'], level=1)
 
-    if args['model'] == 'MDAN':
-        model = MDANet(n_classes=n_classes, n_domains=len(train_loader.sources)).to(device)
 
+    if cfg['model'] == 'FS':
+        model = SimpleCNN(n_classes=n_classes, arch=cfg['arch']).to(device)
         conv_params, fc_params = [], []
-        for name, param in model.named_parameters():
-            if 'FC' in name.upper():
-                fc_params.append(param)
-            else:
-                conv_params.append(param)
+        if cfg['arch'] == 'resnet50':
+                for name, param in model.named_parameters():
+                    if 'fc' in name.lower():
+                        fc_params.append(param)
+                    else:
+                        conv_params.append(param)
+        else:
+            for name, param in model.named_parameters():
+                if ('fc' in name.lower()) or ('task_class' in name.lower()) or ('domain_class' in name.lower()):
+                    fc_params.append(param)
+                else:
+                    conv_params.append(param)
         optimizer = optim.Adadelta([
             {'params':conv_params, 'lr':0.1*cfg['lr'], 'weight_decay':cfg['weight_decay']},
             {'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']}
         ])
+        valid_loaders = {'target pub': test_loader} if cfg['eval_target'] else None
+        fs_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
 
+    elif cfg['model'] == 'FM':
+        model = SimpleCNN(n_classes=n_classes, arch=cfg['arch']).to(device)
+        conv_params, fc_params = [], []
+        if cfg['arch'] == 'resnet50':
+                for name, param in model.named_parameters():
+                    if 'fc' in name.lower():
+                        fc_params.append(param)
+                    else:
+                        conv_params.append(param)
+        else:
+            for name, param in model.named_parameters():
+                if ('fc' in name.lower()) or ('task_class' in name.lower()) or ('domain_class' in name.lower()):
+                    fc_params.append(param)
+                else:
+                    conv_params.append(param)
+        optimizer = optim.Adadelta([
+            {'params':conv_params, 'lr':0.1*cfg['lr'], 'weight_decay':cfg['weight_decay']},
+            {'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']}
+        ])
+        cfg['excl_transf'] = None
+        fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+
+    elif cfg['model'] == 'DANNS':
+        for src in train_loader.sources:
+            model = MixMDANet(n_classes=n_classes, arch=cfg['arch']).to(device)
+            conv_params, fc_params = [], []
+            if cfg['arch'] == 'resnet50':
+                for name, param in model.named_parameters():
+                    if 'fc' in name.lower():
+                        fc_params.append(param)
+                    else:
+                        conv_params.append(param)
+            else:
+                for name, param in model.named_parameters():
+                    if ('task_class' in name.lower()) or ('domain_class' in name.lower()):
+                        fc_params.append(param)
+                    else:
+                        conv_params.append(param)
+            optimizer = optim.Adadelta([
+                {'params':conv_params, 'lr':0.1*cfg['lr'], 'weight_decay':cfg['weight_decay']},
+                {'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']}
+            ])
+            dataset_ss = {src: datasets[src], cfg['target']: datasets[cfg['target']]}
+            train_loader = MSDA_Loader(dataset_ss, cfg['target'], batch_size=cfg['batch_size'], shuffle=True, device=device)
+            dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+            torch.save(model.state_dict(), cfg['output']+'_'+src)
+
+    elif cfg['model'] == 'DANNM':
+        model = MixMDANet(n_classes=n_classes, arch=cfg['arch']).to(device)
+        conv_params, fc_params = [], []
+        if cfg['arch'] == 'resnet50':
+                for name, param in model.named_parameters():
+                    if 'fc' in name.lower():
+                        fc_params.append(param)
+                    else:
+                        conv_params.append(param)
+        else:
+            for name, param in model.named_parameters():
+                if ('fc' in name.lower()) or ('task_class' in name.lower()) or ('domain_class' in name.lower()):
+                    fc_params.append(param)
+                else:
+                    conv_params.append(param)
+        optimizer = optim.Adadelta([
+            {'params':conv_params, 'lr':0.1*cfg['lr'], 'weight_decay':cfg['weight_decay']},
+            {'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']}
+        ])
+        dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+
+    elif args['model'] == 'MDAN':
+        model = MDANet(n_classes=n_classes, n_domains=len(train_loader.sources), arch=cfg['arch']).to(device)
+        conv_params, fc_params = [], []
+        if cfg['arch'] == 'resnet50':
+                for name, param in model.named_parameters():
+                    if 'fc' in name.lower():
+                        fc_params.append(param)
+                    else:
+                        conv_params.append(param)
+        else:
+            for name, param in model.named_parameters():
+                if ('fc' in name.lower()) or ('task_class' in name.lower()) or ('domain_class' in name.lower()):
+                    fc_params.append(param)
+                else:
+                    conv_params.append(param)
+        optimizer = optim.Adadelta([
+            {'params':conv_params, 'lr':0.1*cfg['lr'], 'weight_decay':cfg['weight_decay']},
+            {'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']}
+        ])
+        from routines import test_routine
         mdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+
     elif cfg['model'] == 'MixMDAN':
-        model = MixMDANet(n_classes=n_classes).to(device)
-
+        model = MixMDANet(n_classes=n_classes, arch=cfg['arch']).to(device)
         conv_params, fc_params = [], []
-        for name, param in model.named_parameters():
-            if 'FC' in name.upper():
-                fc_params.append(param)
-            else:
-                conv_params.append(param)
+        if cfg['arch'] == 'resnet50':
+                for name, param in model.named_parameters():
+                    if 'fc' in name.lower():
+                        fc_params.append(param)
+                    else:
+                        conv_params.append(param)
+        else:
+            for name, param in model.named_parameters():
+                if ('fc' in name.lower()) or ('task_class' in name.lower()) or ('domain_class' in name.lower()):
+                    fc_params.append(param)
+                else:
+                    conv_params.append(param)
         optimizer = optim.Adadelta([
             {'params':conv_params, 'lr':0.1*cfg['lr'], 'weight_decay':cfg['weight_decay']},
             {'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']}
         ])
-
         mixmdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
-    elif cfg['model'] == 'MixMDANFM':
-        model = MixMDANet(n_classes=n_classes).to(device)
 
+    elif cfg['model'] == 'MixMDANFM':
+        model = MixMDANet(n_classes=n_classes, arch=cfg['arch']).to(device)
         conv_params, fc_params = [], []
-        for name, param in model.named_parameters():
-            if 'FC' in name.upper():
-                fc_params.append(param)
-            else:
-                conv_params.append(param)
+        if cfg['arch'] == 'resnet50':
+                for name, param in model.named_parameters():
+                    if 'fc' in name.lower():
+                        fc_params.append(param)
+                    else:
+                        conv_params.append(param)
+        else:
+            for name, param in model.named_parameters():
+                if ('fc' in name.lower()) or ('task_class' in name.lower()) or ('domain_class' in name.lower()):
+                    fc_params.append(param)
+                else:
+                    conv_params.append(param)
         optimizer = optim.Adadelta([
             {'params':conv_params, 'lr':0.1*cfg['lr'], 'weight_decay':cfg['weight_decay']},
             {'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']}
         ])
-
         cfg['excl_transf'] = None
         mixmdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+
     else:
         raise ValueError('Unknown model {}'.format(cfg['model']))
 

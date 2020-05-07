@@ -12,8 +12,9 @@ from torch import optim
 from torch.utils.data import Subset, DataLoader
 
 from dataset import Amazon
-from models import MDANet, MixMDANet
-from routines import mdan_train_routine, mixmdan_train_routine, mixmdan_mlp_fm_train_routine
+from models import SimpleMLP, MDANet, MixMDANet
+from routines import (fs_train_routine, mlp_fm_train_routine, dann_train_routine, mdan_train_routine,
+                      mixmdan_train_routine, mixmdan_mlp_fm_train_routine)
 from utils import MSDA_Loader, Logger
 
 
@@ -36,6 +37,7 @@ def main():
     parser.add_argument('--epochs', default=15, type=int, metavar='', help='number of training epochs')
     parser.add_argument('--batch_size', default=20, type=int, metavar='', help='batch size (per domain)')
     parser.add_argument('--checkpoint', default=0, type=int, metavar='', help='number of epochs between saving checkpoints (0 disables checkpoints)')
+    parser.add_argument('--eval_target', default=False, type=int, metavar='', help='evaluate target during training')
     parser.add_argument('--use_cuda', default=True, type=int, metavar='', help='use CUDA capable GPU')
     parser.add_argument('--use_visdom', default=False, type=int, metavar='', help='use Visdom to visualize plots')
     parser.add_argument('--visdom_env', default='amazon_train', type=str, metavar='', help='Visdom environment name')
@@ -83,10 +85,32 @@ def main():
     train_loader = MSDA_Loader(datasets, cfg['target'], batch_size=cfg['batch_size'], shuffle=True, device=device)
     test_pub_loader = DataLoader(test_pub_set, batch_size=4*cfg['batch_size'])
     test_priv_loader = DataLoader(test_priv_set, batch_size=4*cfg['batch_size'])
-    valid_loaders = {'pub target': test_pub_loader, 'priv target': test_priv_loader}
+    valid_loaders = {'target pub': test_pub_loader, 'target priv': test_priv_loader} if cfg['eval_target'] else None
     log.print('target domain:', cfg['target'], 'source domains:', train_loader.sources, level=1)
 
-    if cfg['model'] == 'MDAN':
+    if cfg['model'] == 'FS':
+        model = SimpleMLP(input_dim=cfg['n_features'], n_classes=2).to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
+        if cfg['eval_target']:
+            del valid_loaders['target pub']
+        fs_train_routine(model, optimizer, test_pub_loader, valid_loaders, cfg)
+    elif cfg['model'] == 'FM':
+        model = SimpleMLP(input_dim=cfg['n_features'], n_classes=2).to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
+        mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+    elif cfg['model'] == 'DANNS':
+        for src in train_loader.sources:
+            model = MixMDANet(input_dim=cfg['n_features'], n_classes=2).to(device)
+            optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
+            dataset_ss = {src: datasets[src], cfg['target']: datasets[cfg['target']]}
+            train_loader = MSDA_Loader(dataset_ss, cfg['target'], batch_size=cfg['batch_size'], shuffle=True, device=device)
+            dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+            torch.save(model.state_dict(), cfg['output']+'_'+src)
+    elif cfg['model'] == 'DANNM':
+        model = MixMDANet(input_dim=cfg['n_features'], n_classes=2).to(device)
+        optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
+        dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+    elif cfg['model'] == 'MDAN':
         model = MDANet(input_dim=cfg['n_features'], n_classes=2, n_domains=len(train_loader.sources)).to(device)
         optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
         mdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg)

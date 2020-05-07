@@ -55,6 +55,7 @@ if __name__ == '__main__':
 
     t0 = time.time()
     for X, y in loader:
+        print('X', X.shape)
         m_aug = np.random.randint(3, 10+1)
         aug_transf = lambda batch: torch.stack([
             RandAugment(2, m_aug, cutout=int(0.3*X.shape[2]), exclusions=None)(img)

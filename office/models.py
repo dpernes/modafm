@@ -12,32 +12,106 @@ class Flatten(nn.Module):
     def forward(self, X):
         return X.reshape(X.shape[0], -1)
 
-class MDANet(nn.Module):
-    def __init__(self, n_domains, n_classes):
-        super(MDANet, self).__init__()
+class SimpleCNN(nn.Module):
+    def __init__(self, n_classes, arch='resnet50'):
+        super(SimpleCNN, self).__init__()
 
-        resnet_layers = dict(models.resnet50(pretrained=True).named_children())
-        self.feat_ext = nn.Sequential(OrderedDict(
-            [(key, resnet_layers[key])
-             for key in ['conv1', 'bn1', 'relu', 'maxpool', 'layer1', 'layer2', 'layer3']]))
-
-        self.task_class = nn.Sequential(
-            OrderedDict(
-                [(key, resnet_layers[key])
-                 for key in ['layer4', 'avgpool']]
-                +[('flatten', Flatten()), ('fc', nn.Linear(2048, n_classes))]))
-
-        self.grad_reverse = nn.ModuleList([GradientReversalLayer() for _ in range(n_domains)])
-
-        self.domain_class = nn.ModuleList([])
-        for _ in range(n_domains):
+        if arch == 'resnet50':
             resnet_layers = dict(models.resnet50(pretrained=True).named_children())
-            self.domain_class.append(nn.Sequential(
+            self.feat_ext = nn.Sequential(OrderedDict(
+                [(key, resnet_layers[key])
+                 for key in ['conv1', 'bn1', 'relu', 'maxpool', 'layer1', 'layer2', 'layer3']]))
+
+            self.task_class = nn.Sequential(
                 OrderedDict(
                     [(key, resnet_layers[key])
                      for key in ['layer4', 'avgpool']]
-                    +[('flatten', Flatten()), ('fc', nn.Linear(2048, 2))])))
+                    +[('flatten', Flatten()), ('fc', nn.Linear(2048, n_classes))]))
 
+        else:  # alexnet
+            alexnet_layers = dict(models.alexnet(pretrained=True).named_children())
+            self.feat_ext = nn.Sequential(OrderedDict(
+                [(key, alexnet_layers[key])
+                   for key in ['features', 'avgpool']]
+                  +[('flatten', Flatten()),
+                    ('fc', nn.Sequential(
+                        nn.Dropout(0.5),
+                        nn.Linear(9216, 4096),
+                        nn.ReLU(inplace=True),
+                        nn.Dropout(0.5),
+                        nn.Linear(4096, 4096),
+                        nn.ReLU(inplace=True),))]))
+
+            self.task_class = nn.Sequential(
+                nn.Dropout(0.5),
+                nn.Linear(4096, 4096),
+                nn.ReLU(inplace=True),
+                nn.Linear(4096, n_classes))
+
+    def forward(self, X):
+        Z = self.feat_ext(X)
+        y = self.task_class(Z)
+
+        return y
+
+    def inference(self, X):
+        return self.forward(X)
+
+
+class MDANet(nn.Module):
+    def __init__(self, n_domains, n_classes, arch='resnet50'):
+        super(MDANet, self).__init__()
+
+        if arch == 'resnet50':
+            resnet_layers = dict(models.resnet50(pretrained=True).named_children())
+            self.feat_ext = nn.Sequential(OrderedDict(
+                [(key, resnet_layers[key])
+                 for key in ['conv1', 'bn1', 'relu', 'maxpool', 'layer1', 'layer2', 'layer3']]))
+
+            self.task_class = nn.Sequential(
+                OrderedDict(
+                    [(key, resnet_layers[key])
+                     for key in ['layer4', 'avgpool']]
+                    +[('flatten', Flatten()), ('fc', nn.Linear(2048, n_classes))]))
+
+            self.domain_class = nn.ModuleList([])
+            for _ in range(n_domains):
+                resnet_layers = dict(models.resnet50(pretrained=True).named_children())
+                self.domain_class.append(nn.Sequential(
+                    OrderedDict(
+                        [(key, resnet_layers[key])
+                         for key in ['layer4', 'avgpool']]
+                        +[('flatten', Flatten()), ('fc', nn.Linear(2048, 2))])))
+
+        else:  # alexnet
+            alexnet_layers = dict(models.alexnet(pretrained=True).named_children())
+            self.feat_ext = nn.Sequential(OrderedDict(
+                [(key, alexnet_layers[key])
+                   for key in ['features', 'avgpool']]
+                  +[('flatten', Flatten()),
+                    ('fc', nn.Sequential(
+                        nn.Dropout(0.5),
+                        nn.Linear(9216, 4096),
+                        nn.ReLU(inplace=True),
+                        nn.Dropout(0.5),
+                        nn.Linear(4096, 4096),
+                        nn.ReLU(inplace=True),))]))
+
+            self.task_class = nn.Sequential(
+                nn.Dropout(0.5),
+                nn.Linear(4096, 4096),
+                nn.ReLU(inplace=True),
+                nn.Linear(4096, n_classes))
+
+            self.domain_class = nn.ModuleList([])
+            for _ in range(n_domains):
+                self.domain_class.append(nn.Sequential(
+                    nn.Dropout(0.5),
+                    nn.Linear(4096, 4096),
+                    nn.ReLU(inplace=True),
+                    nn.Linear(4096, n_classes)))
+
+        self.grad_reverse = nn.ModuleList([GradientReversalLayer() for _ in range(n_domains)])
 
     def forward(self, Xs, Xt):
         ys, ds, dt = [], [], []
@@ -61,28 +135,55 @@ class MDANet(nn.Module):
 
 
 class MixMDANet(nn.Module):
-    def __init__(self, n_classes):
+    def __init__(self, n_classes, arch='resnet50'):
         super(MixMDANet, self).__init__()
 
-        resnet_layers = dict(models.resnet50(pretrained=True).named_children())
-        self.feat_ext = nn.Sequential(OrderedDict(
-            [(key, resnet_layers[key])
-             for key in ['conv1', 'bn1', 'relu', 'maxpool', 'layer1', 'layer2', 'layer3']]))
-
-        self.task_class = nn.Sequential(
-            OrderedDict(
+        if arch == 'resnet50':
+            resnet_layers = dict(models.resnet50(pretrained=True).named_children())
+            self.feat_ext = nn.Sequential(OrderedDict(
                 [(key, resnet_layers[key])
-                 for key in ['layer4', 'avgpool']]
-                +[('flatten', Flatten()), ('fc', nn.Linear(2048, n_classes))]))
+                 for key in ['conv1', 'bn1', 'relu', 'maxpool', 'layer1', 'layer2', 'layer3']]))
+
+            self.task_class = nn.Sequential(
+                OrderedDict(
+                    [(key, resnet_layers[key])
+                     for key in ['layer4', 'avgpool']]
+                    +[('flatten', Flatten()), ('fc', nn.Linear(2048, n_classes))]))
+
+            resnet_layers = dict(models.resnet50(pretrained=True).named_children())
+            self.domain_class = nn.Sequential(
+                OrderedDict(
+                    [(key, resnet_layers[key])
+                     for key in ['layer4', 'avgpool']]
+                    +[('flatten', Flatten()), ('fc', nn.Linear(2048, 2))]))
+
+        else:  # alexnet
+            alexnet_layers = dict(models.alexnet(pretrained=True).named_children())
+            self.feat_ext = nn.Sequential(OrderedDict(
+                [(key, alexnet_layers[key])
+                   for key in ['features', 'avgpool']]
+                  +[('flatten', Flatten()),
+                    ('fc', nn.Sequential(
+                        nn.Dropout(0.5),
+                        nn.Linear(9216, 4096),
+                        nn.ReLU(inplace=True),
+                        nn.Dropout(0.5),
+                        nn.Linear(4096, 4096),
+                        nn.ReLU(inplace=True),))]))
+
+            self.task_class = nn.Sequential(
+                nn.Dropout(0.5),
+                nn.Linear(4096, 4096),
+                nn.ReLU(inplace=True),
+                nn.Linear(4096, n_classes))
+
+            self.domain_class = nn.Sequential(
+                nn.Dropout(0.5),
+                nn.Linear(4096, 4096),
+                nn.ReLU(inplace=True),
+                nn.Linear(4096, 2))
 
         self.grad_reverse = GradientReversalLayer()
-
-        resnet_layers = dict(models.resnet50(pretrained=True).named_children())
-        self.domain_class = nn.Sequential(
-            OrderedDict(
-                [(key, resnet_layers[key])
-                 for key in ['layer4', 'avgpool']]
-                +[('flatten', Flatten()), ('fc', nn.Linear(2048, 2))]))
 
     def forward(self, Xs, Xt):
         ys, ds = [], []
@@ -107,7 +208,7 @@ class MixMDANet(nn.Module):
 
 if __name__ == '__main__':
     N = 32
-    model = MDANet(n_classes=31, n_domains=3)
+    model = MDANet(n_classes=31, n_domains=3, arch='alexnet')
     print(model)
     Xs = [torch.zeros((N, 3, 256, 256)) for _ in range(3)]
     Xt = torch.zeros((N, 3, 256, 256))

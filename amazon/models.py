@@ -6,6 +6,37 @@ import torch.nn as nn
 
 from gradient_reversal import GradientReversalLayer
 
+class SimpleMLP(nn.Module):
+    def __init__(self, input_dim, n_classes, dropout_rate=0.):
+        super(SimpleMLP, self).__init__()
+        self.feat_ext = nn.Sequential(OrderedDict([
+            ('Dropout1', nn.Dropout(dropout_rate)),
+            ('Linear1', nn.Linear(input_dim, 1000)),
+            ('ReLU1', nn.ReLU()),
+            ('Dropout2', nn.Dropout(dropout_rate)),
+            ('Linear2', nn.Linear(1000, 500)),
+            ('ReLU2', nn.ReLU()),
+            ('Linear3', nn.Linear(500, 100)),
+            ('ReLU3', nn.ReLU()),
+            ('Dropout3', nn.Dropout(dropout_rate)),
+        ]))
+
+        self.task_class = nn.Linear(100, n_classes)
+
+    def set_dropout_rate(self, p):
+        for name, layer in self.named_modules():
+            if 'dropout' in name.lower():
+                layer.p = p
+
+    def forward(self, X):
+        Z = self.feat_ext(X)
+        y = self.task_class(Z)
+
+        return y
+
+    def inference(self, X):
+        return self.forward(X)
+
 class MDANet(nn.Module):
     def __init__(self, input_dim, n_classes, n_domains, dropout_rate=0.):
         super(MDANet, self).__init__()

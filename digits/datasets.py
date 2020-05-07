@@ -1,5 +1,4 @@
 import os
-import random
 
 import torch
 from torch.utils.data import DataLoader, Dataset, Subset
@@ -91,6 +90,7 @@ class SynthDigits(Dataset):
         return img, self.labels[i]
 
 if __name__ == '__main__':
+    import random
     import torchvision.transforms as T
     import matplotlib.gridspec as gridspec
     import matplotlib.pyplot as plt
