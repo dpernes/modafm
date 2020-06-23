@@ -622,7 +622,6 @@ def mixmdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
     device = 'cuda:0' if (cfg['use_cuda'] and torch.cuda.is_available()) else 'cpu'
     beta = nn.Parameter(torch.Tensor(len(train_loader.sources)).to(device))
     nn.init.uniform_(beta)
-    print(beta)
     grad_reverse_fn = GradientReversalLayer().to(device)
     optimizer.add_param_group({'params': beta, 'lr': cfg['lr']})
     if cfg['use_visdom']:

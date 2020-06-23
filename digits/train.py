@@ -29,7 +29,8 @@ def main():
     parser.add_argument('-t', '--target', default='MNIST', type=str, metavar='', help='target domain (\'MNIST\' / \'MNIST_M\' / \'SVHN\' / \'SynthDigits\')')
     parser.add_argument('-o', '--output', default='msda.pth', type=str, metavar='', help='model file (output of train)')
     parser.add_argument('--icfg', default=None, type=str, metavar='', help='config file (overrides args)')
-    parser.add_argument('--n_images', default=20000, type=int, metavar='', help='number of images from each domain')
+    parser.add_argument('--n_src_images', default=20000, type=int, metavar='', help='number of images from each source domain')
+    parser.add_argument('--n_tgt_images', default=20000, type=int, metavar='', help='number of images from the target domain')
     parser.add_argument('--mu', type=float, default=1e-2, help="hyperparameter of the coefficient for the domain adversarial loss")
     parser.add_argument('--beta', type=float, default=0.2, help="hyperparameter of the non-sparsity regularization")
     parser.add_argument('--lambda', type=float, default=1e-1, help="hyperparameter of the FixMatch loss")
@@ -100,12 +101,13 @@ def main():
     # define public and private test sets: the private is not used at training time to learn invariant representations
     for ds_name in datasets:
         if ds_name == cfg['target']:
-            indices = random.sample(range(len(datasets[ds_name])), 2*cfg['n_images'])
-            test_pub_set = Subset(test_set, indices[0:cfg['n_images']])
-            test_priv_set = Subset(test_set, indices[cfg['n_images']::])
+            indices = random.sample(range(len(datasets[ds_name])), cfg['n_tgt_images']+cfg['n_src_images'])
+            test_pub_set = Subset(test_set, indices[0:cfg['n_tgt_images']])
+            test_priv_set = Subset(test_set, indices[cfg['n_tgt_images']::])
+            datasets[cfg['target']] = Subset(datasets[cfg['target']], indices[0:cfg['n_tgt_images']])
         else:
-            indices = random.sample(range(len(datasets[ds_name])), cfg['n_images'])
-        datasets[ds_name] = Subset(datasets[ds_name], indices[0:cfg['n_images']])
+            indices = random.sample(range(len(datasets[ds_name])), cfg['n_src_images'])
+            datasets[ds_name] = Subset(datasets[ds_name], indices[0:cfg['n_src_images']])
 
     # build the dataloader
     train_loader = MSDA_Loader(datasets, cfg['target'], batch_size=cfg['batch_size'], shuffle=True, device=device)
