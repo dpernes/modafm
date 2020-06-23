@@ -113,7 +113,7 @@ def main():
     test_priv_loader = DataLoader(test_priv_set, batch_size=4*cfg['batch_size'])
     valid_loaders = ({'target pub': test_pub_loader, 'target priv': test_priv_loader}
                      if cfg['eval_target'] else None)
-    log.print('target domain:', cfg['target'], '| source domains:', train_loader.sources, level=0)
+    log.print('target domain:', cfg['target'], '| source domains:', train_loader.sources, level=1)
 
     if cfg['model'] == 'FS':
         model = SimpleCNN().to(device)

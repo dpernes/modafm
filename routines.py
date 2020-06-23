@@ -41,8 +41,8 @@ def fs_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
         loss_plt = plotter.VisdomLossPlotter(env_name=cfg['visdom_env'], port=cfg['visdom_port'])
     log = Logger(cfg['verbosity'])
 
-    for epoch in range(cfg['epochs']):
-        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']-1), level=1)
+    for epoch in range(1, cfg['epochs']+1):
+        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']), level=1)
         model.train()
         loss_hist = []
         accuracy_hist = []
@@ -96,9 +96,19 @@ def mdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
         loss_plt = plotter.VisdomLossPlotter(env_name=cfg['visdom_env'], port=cfg['visdom_port'])
     log = Logger(cfg['verbosity'])
 
+    if valid_loaders is not None:
+        accuracies, losses = test_routine(model, valid_loaders, cfg)
+        for split_name in valid_loaders.keys():
+            log.print(split_name+' class loss: {:.3f}'.format(losses[split_name]), level=1)
+            log.print(split_name+' accuracy: {:.3f}'.format(accuracies[split_name]), level=1)
+            if cfg['use_visdom']:
+                loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', 0, losses[split_name])
+                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', 0, accuracies[split_name])
+        log.print(level=1)
+
     gamma = 10.
-    for epoch in range(cfg['epochs']):
-        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']-1), level=1)
+    for epoch in range(1, cfg['epochs']+1):
+        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']), level=1)
         model.train()
         loss_hist = []
         class_losses_hist = [[] for i in range(len(train_loader.sources))]
@@ -161,7 +171,6 @@ def mdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
             if cfg['use_visdom']:
                 loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', epoch, losses[split_name])
                 loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
-                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
         log.print(level=1)
 
 
@@ -172,8 +181,8 @@ def mdan_unif_train_routine(model, optimizers, train_loader, valid_loaders, cfg)
         loss_plt = plotter.VisdomLossPlotter(env_name=cfg['visdom_env'], port=cfg['visdom_port'])
     log = Logger(cfg['verbosity'])
 
-    for epoch in range(cfg['epochs']):
-        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']-1), level=1)
+    for epoch in range(1, cfg['epochs']+1):
+        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']), level=1)
         model.train()
         loss_hist = []
         class_losses_hist = [[] for i in range(len(train_loader.sources))]
@@ -247,7 +256,6 @@ def mdan_unif_train_routine(model, optimizers, train_loader, valid_loaders, cfg)
             if cfg['use_visdom']:
                 loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', epoch, losses[split_name])
                 loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
-                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
         log.print(level=1)
 
 
@@ -257,8 +265,8 @@ def mdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
         loss_plt = plotter.VisdomLossPlotter(env_name=cfg['visdom_env'], port=cfg['visdom_port'])
     log = Logger(cfg['verbosity'])
 
-    for epoch in range(cfg['epochs']):
-        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']-1), level=1)
+    for epoch in range(1, cfg['epochs']+1):
+        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']), level=1)
         model.train()
         loss_hist = []
         class_losses_hist = [[] for i in range(len(train_loader.sources))]
@@ -333,7 +341,6 @@ def mdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
             if cfg['use_visdom']:
                 loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', epoch, losses[split_name])
                 loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
-                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
         log.print(level=1)
 
 
@@ -344,8 +351,8 @@ def mdan_unif_fm_train_routine(model, optimizers, train_loader, valid_loaders, c
         loss_plt = plotter.VisdomLossPlotter(env_name=cfg['visdom_env'], port=cfg['visdom_port'])
     log = Logger(cfg['verbosity'])
 
-    for epoch in range(cfg['epochs']):
-        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']-1), level=1)
+    for epoch in range(1, cfg['epochs']+1):
+        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']), level=1)
         model.train()
         loss_hist, fm_loss_hist = [], []
         class_losses_hist = [[] for i in range(len(train_loader.sources))]
@@ -436,7 +443,6 @@ def mdan_unif_fm_train_routine(model, optimizers, train_loader, valid_loaders, c
             if cfg['use_visdom']:
                 loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', epoch, losses[split_name])
                 loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
-                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
         log.print(level=1)
 
 
@@ -450,8 +456,18 @@ def mixmdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
         loss_plt = plotter.VisdomLossPlotter(env_name=cfg['visdom_env'], port=cfg['visdom_port'])
     log = Logger(cfg['verbosity'])
 
-    for epoch in range(cfg['epochs']):
-        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']-1), level=1)
+    if valid_loaders is not None:
+        accuracies, losses = test_routine(model, valid_loaders, cfg)
+        for split_name in valid_loaders.keys():
+            log.print(split_name+' class loss: {:.3f}'.format(losses[split_name]), level=1)
+            log.print(split_name+' accuracy: {:.3f}'.format(accuracies[split_name]), level=1)
+            if cfg['use_visdom']:
+                loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', 0, losses[split_name])
+                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', 0, accuracies[split_name])
+        log.print(level=1)
+
+    for epoch in range(1, cfg['epochs']+1):
+        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']), level=1)
         model.train()
         loss_hist = []
         class_losses_hist = [[] for i in range(len(train_loader.sources))]
@@ -522,7 +538,6 @@ def mixmdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
             if cfg['use_visdom']:
                 loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', epoch, losses[split_name])
                 loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
-                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
         log.print(level=1)
 
 def dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
@@ -531,8 +546,8 @@ def dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
         loss_plt = plotter.VisdomLossPlotter(env_name=cfg['visdom_env'], port=cfg['visdom_port'])
     log = Logger(cfg['verbosity'])
 
-    for epoch in range(cfg['epochs']):
-        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']-1), level=1)
+    for epoch in range(1, cfg['epochs']+1):
+        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']), level=1)
         model.train()
         loss_hist = []
         class_losses_hist = [[] for i in range(len(train_loader.sources))]
@@ -600,22 +615,38 @@ def dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
             if cfg['use_visdom']:
                 loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', epoch, losses[split_name])
                 loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
-                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
         log.print(level=1)
 
 
 def mixmdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
     device = 'cuda:0' if (cfg['use_cuda'] and torch.cuda.is_available()) else 'cpu'
-    alpha = nn.Parameter(torch.Tensor(len(train_loader.sources)).to(device))
-    nn.init.uniform_(alpha)
+    beta = nn.Parameter(torch.Tensor(len(train_loader.sources)).to(device))
+    nn.init.uniform_(beta)
+    print(beta)
     grad_reverse_fn = GradientReversalLayer().to(device)
-    optimizer.add_param_group({'params': alpha, 'lr': cfg['lr']})
+    optimizer.add_param_group({'params': beta, 'lr': cfg['lr']})
     if cfg['use_visdom']:
         loss_plt = plotter.VisdomLossPlotter(env_name=cfg['visdom_env'], port=cfg['visdom_port'])
     log = Logger(cfg['verbosity'])
 
-    for epoch in range(cfg['epochs']):
-        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']-1), level=1)
+    if valid_loaders is not None:
+        accuracies, losses = test_routine(model, valid_loaders, cfg)
+        for split_name in valid_loaders.keys():
+            log.print(split_name+' class loss: {:.3f}'.format(losses[split_name]), level=1)
+            log.print(split_name+' accuracy: {:.3f}'.format(accuracies[split_name]), level=1)
+            if cfg['use_visdom']:
+                loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', 0, losses[split_name])
+                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', 0, accuracies[split_name])
+        log.print(level=1)
+
+    if cfg['use_visdom']:
+        alpha = F.softmax(beta, dim=0)
+        for j, src in enumerate(train_loader.sources):
+            loss_plt.plot('mix coef', src, 'mix coef', 0, alpha[j].item())
+
+    best_acc = 0.
+    for epoch in range(1, cfg['epochs']+1):
+        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']), level=1)
         model.train()
         loss_hist, fm_loss_hist = [], []
         class_losses_hist = [[] for i in range(len(train_loader.sources))]
@@ -643,11 +674,11 @@ def mixmdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
             tgt_domain_loss = F.cross_entropy(dt_logits, dt)
             fm_loss = fixmatch_loss(yt_logits, yt_aug_logits)
 
-            beta = F.softmax(alpha, dim=0)
-            beta_grad_rev = grad_reverse_fn(beta)
-            mix_domain_loss = torch.sum(beta_grad_rev * src_domain_losses) + tgt_domain_loss
-            mix_class_loss = torch.sum(beta * class_losses)
-            loss = mix_class_loss + cfg['mu']*mix_domain_loss + cfg['beta']*torch.sum(beta**2) + cfg['lambda']*fm_loss
+            alpha = F.softmax(beta, dim=0)
+            alpha_grad_rev = grad_reverse_fn(alpha)
+            mix_domain_loss = torch.sum(alpha_grad_rev * src_domain_losses) + tgt_domain_loss
+            mix_class_loss = torch.sum(alpha * class_losses)
+            loss = mix_class_loss + cfg['mu']*mix_domain_loss + cfg['beta']*torch.sum(alpha**2) + cfg['lambda']*fm_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -676,14 +707,15 @@ def mixmdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
                   +' | fixmatch loss: {:.3f}'.format(fm_loss),
                   level=1)
         log.print('accuracies: '+ str([float('{:.3f}'.format(acc)) for acc in accuracies]), level=1)
-        log.print('mix coef: '+ str([float('{:.3f}'.format(coef)) for coef in beta]), level=1)
+        log.print('mix coef: '+ str([float('{:.3f}'.format(coef)) for coef in alpha]), level=1)
         log.print('{:.1f} seconds'.format(t1-t0), level=1)
         if cfg['use_visdom']:
             loss_plt.plot('global loss', 'train', 'total', epoch, loss)
             loss_plt.plot('domain loss', 'train', 'XEN', epoch, domain_loss)
-            for i in range(len(train_loader.sources)):
-                loss_plt.plot('class loss', train_loader.sources[i], 'XEN', epoch, class_losses[i])
-                loss_plt.plot('accuracy', train_loader.sources[i], 'ACC', epoch, accuracies[i])
+            for j, src in enumerate(train_loader.sources):
+                loss_plt.plot('class loss', src, 'XEN', epoch, class_losses[j])
+                loss_plt.plot('accuracy', src, 'ACC', epoch, accuracies[j])
+                loss_plt.plot('mix coef', src, 'coeff', epoch, alpha[j].item())
             loss_plt.plot('fixmatch loss', 'train', 'XEN', epoch, fm_loss)
 
         if (cfg['checkpoint'] != 0) and ((epoch+1)%cfg['checkpoint'] == 0):
@@ -701,9 +733,7 @@ def mixmdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
             if cfg['use_visdom']:
                 loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', epoch, losses[split_name])
                 loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
-                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
         log.print(level=1)
-
 
 def fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
     device = 'cuda:0' if (cfg['use_cuda'] and torch.cuda.is_available()) else 'cpu'
@@ -711,8 +741,8 @@ def fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
         loss_plt = plotter.VisdomLossPlotter(env_name=cfg['visdom_env'], port=cfg['visdom_port'])
     log = Logger(cfg['verbosity'])
 
-    for epoch in range(cfg['epochs']):
-        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']-1), level=1)
+    for epoch in range(1, cfg['epochs']+1):
+        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']), level=1)
         model.train()
         loss_hist, fm_loss_hist = [], []
         class_losses_hist = [[] for i in range(len(train_loader.sources))]
@@ -781,7 +811,6 @@ def fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
             if cfg['use_visdom']:
                 loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', epoch, losses[split_name])
                 loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
-                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
         log.print(level=1)
 
 
@@ -791,8 +820,8 @@ def mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
         loss_plt = plotter.VisdomLossPlotter(env_name=cfg['visdom_env'], port=cfg['visdom_port'])
     log = Logger(cfg['verbosity'])
 
-    for epoch in range(cfg['epochs']):
-        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']-1), level=1)
+    for epoch in range(1, cfg['epochs']+1):
+        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']), level=1)
         model.train()
         loss_hist, fm_loss_hist = [], []
         class_losses_hist = [[] for i in range(len(train_loader.sources))]
@@ -859,7 +888,6 @@ def mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
             if cfg['use_visdom']:
                 loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', epoch, losses[split_name])
                 loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
-                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
         log.print(level=1)
 
 
@@ -873,8 +901,8 @@ def mixmdan_mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, 
         loss_plt = plotter.VisdomLossPlotter(env_name=cfg['visdom_env'], port=cfg['visdom_port'])
     log = Logger(cfg['verbosity'])
 
-    for epoch in range(cfg['epochs']):
-        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']-1), level=1)
+    for epoch in range(1, cfg['epochs']+1):
+        log.print('Epoch {}/{}'.format(epoch, cfg['epochs']), level=1)
         model.train()
         loss_hist, fm_loss_hist = [], []
         class_losses_hist = [[] for i in range(len(train_loader.sources))]
@@ -960,8 +988,8 @@ def mixmdan_mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, 
             if cfg['use_visdom']:
                 loss_plt.plot('class loss', cfg['target']+' '+split_name, 'XEN', epoch, losses[split_name])
                 loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
-                loss_plt.plot('accuracy', cfg['target']+' '+split_name, 'ACC', epoch, accuracies[split_name])
         log.print(level=1)
+
 
 def cross_validation(datasets, cfg, cv_keys):
     parameters = []
