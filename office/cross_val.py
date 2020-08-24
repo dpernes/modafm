@@ -16,13 +16,14 @@ import torchvision.transforms.functional as TF
 
 from dataset import Office
 from models import MDANet, MixMDANet
-from routines import mdan_train_routine, moda_train_routine, moda_fm_train_routine
-from utils import MSDA_Loader, Logger, cross_validation
+from routines import (cross_validation, mdan_train_routine,
+                      moda_train_routine, moda_mlp_fm_train_routine)
+from utils import Logger
 
 
 def main():
     parser = argparse.ArgumentParser(description='Cross-validation over source domains for the Office dataset.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-m', '--model', default='MODAFM', type=str, metavar='', help='model type (\'FS\' / \'DANNS\' / \'DANNM\' / \'MDAN\' / \'MODA\' / \'FM\' / \'MODAFM\'')
+    parser.add_argument('-m', '--model', default='MODAFM', type=str, metavar='', help='model type (\'MDAN\' / \'MODA\' / \'MODAFM\'')
     parser.add_argument('-d', '--data_path', default='/ctm-hdd-pool01/DB/OfficeRsz', type=str, metavar='', help='data directory path')
     parser.add_argument('-t', '--target', default='amazon', type=str, metavar='', help='target domain (\'amazon\' / \'dslr\' / \'webcam\')')
     parser.add_argument('-o', '--output', default='cv_out.ini', type=str, metavar='', help='best hyperparameters (output of cross validation')
