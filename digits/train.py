@@ -15,25 +15,25 @@ from torch.utils.data import Subset, DataLoader
 import torchvision.transforms as T
 
 from datasets import MNIST, MNIST_M, SVHN, SynthDigits
-from models import SimpleCNN, MDANet, MixMDANet
+from models import SimpleCNN, MDANet, MODANet
 from routines import (fs_train_routine, fm_train_routine, dann_train_routine, mdan_train_routine, mdan_unif_train_routine,
-                      mdan_fm_train_routine, mdan_unif_fm_train_routine, mixmdan_train_routine, mixmdan_fm_train_routine)
+                      mdan_fm_train_routine, mdan_unif_fm_train_routine, moda_train_routine, moda_fm_train_routine)
 from utils import MSDA_Loader, Logger
 from augment import Flip
 
 
 def main():
     parser = argparse.ArgumentParser(description='Domain adaptation experiments with digits datasets.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-m', '--model', default='MDAN', type=str, metavar='', help='model type (\'FS\' / \'MDAN\' / \'MixMDAN\' / \'FM\' / \'MixMDANFM\')')
+    parser.add_argument('-m', '--model', default='MODAFM', type=str, metavar='', help='model type (\'FS\' / \'DANNS\' / \'DANNM\' / \'MDAN\' / \'MODA\' / \'FM\' / \'MODAFM\'')
     parser.add_argument('-d', '--data_path', default='/ctm-hdd-pool01/DB/', type=str, metavar='', help='data directory path')
     parser.add_argument('-t', '--target', default='MNIST', type=str, metavar='', help='target domain (\'MNIST\' / \'MNIST_M\' / \'SVHN\' / \'SynthDigits\')')
     parser.add_argument('-o', '--output', default='msda.pth', type=str, metavar='', help='model file (output of train)')
     parser.add_argument('--icfg', default=None, type=str, metavar='', help='config file (overrides args)')
     parser.add_argument('--n_src_images', default=20000, type=int, metavar='', help='number of images from each source domain')
     parser.add_argument('--n_tgt_images', default=20000, type=int, metavar='', help='number of images from the target domain')
-    parser.add_argument('--mu', type=float, default=1e-2, help="hyperparameter of the coefficient for the domain adversarial loss")
-    parser.add_argument('--beta', type=float, default=0.2, help="hyperparameter of the non-sparsity regularization")
-    parser.add_argument('--lambda', type=float, default=1e-1, help="hyperparameter of the FixMatch loss")
+    parser.add_argument('--mu_d', type=float, default=1e-2, help="hyperparameter of the coefficient for the domain discriminator loss")
+    parser.add_argument('--mu_s', type=float, default=0.2, help="hyperparameter of the non-sparsity regularization")
+    parser.add_argument('--mu_c', type=float, default=1e-1, help="hyperparameter of the FixMatch loss")
     parser.add_argument('--n_rand_aug', type=int, default=2, help="N parameter of RandAugment")
     parser.add_argument('--m_min_rand_aug', type=int, default=3, help="minimum M parameter of RandAugment")
     parser.add_argument('--m_max_rand_aug', type=int, default=10, help="maximum M parameter of RandAugment")
@@ -130,14 +130,14 @@ def main():
         fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
     elif cfg['model'] == 'DANNS':
         for src in train_loader.sources:
-            model = MixMDANet().to(device)
+            model = MODANet().to(device)
             optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
             dataset_ss = {src: datasets[src], cfg['target']: datasets[cfg['target']]}
             train_loader = MSDA_Loader(dataset_ss, cfg['target'], batch_size=cfg['batch_size'], shuffle=True, device=device)
             dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
             torch.save(model.state_dict(), cfg['output']+'_'+src)
     elif cfg['model'] == 'DANNM':
-        model = MixMDANet().to(device)
+        model = MODANet().to(device)
         optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
         dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
     elif cfg['model'] == 'MDAN':
@@ -166,15 +166,15 @@ def main():
         optimizers = (task_optim, adv_optim)
         cfg['excl_transf'] = [Flip]
         mdan_unif_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
-    elif cfg['model'] == 'MixMDAN':
-        model = MixMDANet().to(device)
+    elif cfg['model'] == 'MODA':
+        model = MODANet().to(device)
         optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
-        mixmdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
-    elif cfg['model'] == 'MixMDANFM':
-        model = MixMDANet().to(device)
+        moda_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+    elif cfg['model'] == 'MODAFM':
+        model = MODANet().to(device)
         optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
         cfg['excl_transf'] = [Flip]
-        mixmdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+        moda_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
     else:
         raise ValueError('Unknown model {}'.format(cfg['model']))
 

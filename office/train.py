@@ -15,23 +15,23 @@ import torchvision.transforms as T
 import torchvision.transforms.functional as TF
 
 from dataset import Office
-from models import SimpleCNN, MDANet, MixMDANet
+from models import SimpleCNN, MDANet, MODANet
 from routines import (fs_train_routine, fm_train_routine, dann_train_routine, mdan_train_routine,
-                      mdan_train_routine, mixmdan_train_routine, mixmdan_fm_train_routine)
+                      mdan_train_routine, moda_train_routine, moda_fm_train_routine)
 from utils import MSDA_Loader, Logger
 
 
 def main():
     parser = argparse.ArgumentParser(description='Domain adaptation experiments with Office dataset.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-m', '--model', default='MDAN', type=str, metavar='', help='model type (\'FS\' \'MDAN\' / \'MDANU\' / \'MDANFM\' / \'MDANUFM\' / \'MixMDAN\' / \'MixMDANFM\')')
+    parser.add_argument('-m', '--model', default='MODAFM', type=str, metavar='', help='model type (\'FS\' / \'DANNS\' / \'DANNM\' / \'MDAN\' / \'MODA\' / \'FM\' / \'MODAFM\'')
     parser.add_argument('-d', '--data_path', default='/ctm-hdd-pool01/DB/OfficeRsz', type=str, metavar='', help='data directory path')
     parser.add_argument('-t', '--target', default='amazon', type=str, metavar='', help='target domain (\'amazon\' / \'dslr\' / \'webcam\')')
     parser.add_argument('-o', '--output', default='msda.pth', type=str, metavar='', help='model file (output of train)')
     parser.add_argument('--icfg', default=None, type=str, metavar='', help='config file (overrides args)')
     parser.add_argument('--arch', default='resnet50', type=str, metavar='', help='network architecture (\'resnet50\' / \'alexnet\'')
-    parser.add_argument('--mu', type=float, default=1e-2, help="hyperparameter of the coefficient for the domain adversarial loss")
-    parser.add_argument('--beta', type=float, default=0., help="hyperparameter of the non-sparsity regularization")
-    parser.add_argument('--lambda', type=float, default=1e-1, help="hyperparameter of the FixMatch loss")
+    parser.add_argument('--mu_d', type=float, default=1e-2, help="hyperparameter of the coefficient for the domain discriminator loss")
+    parser.add_argument('--mu_s', type=float, default=0., help="hyperparameter of the non-sparsity regularization")
+    parser.add_argument('--mu_c', type=float, default=1e-1, help="hyperparameter of the FixMatch loss")
     parser.add_argument('--n_rand_aug', type=int, default=2, help="N parameter of RandAugment")
     parser.add_argument('--m_min_rand_aug', type=int, default=3, help="minimum M parameter of RandAugment")
     parser.add_argument('--m_max_rand_aug', type=int, default=10, help="maximum M parameter of RandAugment")
@@ -169,7 +169,7 @@ def main():
 
     elif cfg['model'] == 'DANNS':
         for src in train_loader.sources:
-            model = MixMDANet(n_classes=n_classes, arch=cfg['arch']).to(device)
+            model = MODANet(n_classes=n_classes, arch=cfg['arch']).to(device)
             conv_params, fc_params = [], []
             if cfg['arch'] == 'resnet50':
                 for name, param in model.named_parameters():
@@ -193,7 +193,7 @@ def main():
             torch.save(model.state_dict(), cfg['output']+'_'+src)
 
     elif cfg['model'] == 'DANNM':
-        model = MixMDANet(n_classes=n_classes, arch=cfg['arch']).to(device)
+        model = MODANet(n_classes=n_classes, arch=cfg['arch']).to(device)
         conv_params, fc_params = [], []
         if cfg['arch'] == 'resnet50':
                 for name, param in model.named_parameters():
@@ -232,11 +232,10 @@ def main():
             {'params':conv_params, 'lr':0.1*cfg['lr'], 'weight_decay':cfg['weight_decay']},
             {'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']}
         ])
-        from routines import test_routine
-        mdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+        moda_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
 
-    elif cfg['model'] == 'MixMDAN':
-        model = MixMDANet(n_classes=n_classes, arch=cfg['arch']).to(device)
+    elif cfg['model'] == 'MODA':
+        model = MODANet(n_classes=n_classes, arch=cfg['arch']).to(device)
         conv_params, fc_params = [], []
         if cfg['arch'] == 'resnet50':
                 for name, param in model.named_parameters():
@@ -254,10 +253,10 @@ def main():
             {'params':conv_params, 'lr':0.1*cfg['lr'], 'weight_decay':cfg['weight_decay']},
             {'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']}
         ])
-        mixmdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+        moda_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
 
-    elif cfg['model'] == 'MixMDANFM':
-        model = MixMDANet(n_classes=n_classes, arch=cfg['arch']).to(device)
+    elif cfg['model'] == 'MODAFM':
+        model = MODANet(n_classes=n_classes, arch=cfg['arch']).to(device)
         conv_params, fc_params = [], []
         if cfg['arch'] == 'resnet50':
                 for name, param in model.named_parameters():
@@ -276,7 +275,7 @@ def main():
             {'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']}
         ])
         cfg['excl_transf'] = None
-        mixmdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+        moda_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
 
     else:
         raise ValueError('Unknown model {}'.format(cfg['model']))

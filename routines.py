@@ -123,7 +123,7 @@ def mdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
             class_losses = torch.stack([F.cross_entropy(ys_logits[i], ys[i]) for i in range(len(train_loader.sources))])
             domain_losses = torch.stack([F.cross_entropy(ds_logits[i], ds[i]) + F.cross_entropy(dt_logits[i], dt)
                                          for i in range(len(train_loader.sources))])
-            loss = torch.log(torch.sum(torch.exp(gamma*(class_losses + cfg['mu']*domain_losses))))/gamma
+            loss = torch.log(torch.sum(torch.exp(gamma*(class_losses + cfg['mu_d']*domain_losses))))/gamma
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -199,7 +199,7 @@ def mdan_unif_train_routine(model, optimizers, train_loader, valid_loaders, cfg)
                                          for i in range(len(train_loader.sources))])
             unif_losses = -torch.stack([torch.mean(F.log_softmax(ds_logits[i], dim=1)) + torch.mean(F.log_softmax(dt_logits[i], dim=1))
                                         for i in range(len(train_loader.sources))])
-            loss = torch.log(torch.sum(torch.exp(10*(class_losses + cfg['mu']*unif_losses))))/10
+            loss = torch.log(torch.sum(torch.exp(10*(class_losses + cfg['mu_d']*unif_losses))))/10
             adv_loss = torch.sum(domain_losses)
 
             adv_optim.zero_grad()
@@ -292,8 +292,8 @@ def mdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
             domain_losses = torch.stack([F.cross_entropy(ds_logits[i], ds[i]) + F.cross_entropy(dt_logits[i], dt)
                                          for i in range(len(train_loader.sources))])
             fm_loss = fixmatch_loss(yt_logits, yt_aug_logits)
-            loss = torch.log(torch.sum(torch.exp(10*(class_losses + cfg['mu']*domain_losses))))/10
-            loss += cfg['lambda']*fm_loss
+            loss = torch.log(torch.sum(torch.exp(10*(class_losses + cfg['mu_d']*domain_losses))))/10
+            loss += cfg['mu_c']*fm_loss
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -380,10 +380,10 @@ def mdan_unif_fm_train_routine(model, optimizers, train_loader, valid_loaders, c
             unif_losses = -torch.stack([torch.mean(F.log_softmax(ds_logits[i], dim=1)) + torch.mean(F.log_softmax(dt_logits[i], dim=1))
                                         for i in range(len(train_loader.sources))])
             fm_loss = fixmatch_loss(yt_logits, yt_aug_logits)
-            loss = torch.log(torch.sum(torch.exp(10*(class_losses + cfg['mu']*unif_losses))))/10
+            loss = torch.log(torch.sum(torch.exp(10*(class_losses + cfg['mu_d']*unif_losses))))/10
             adv_loss = torch.sum(domain_losses)
 
-            loss += cfg['lambda']*fm_loss
+            loss += cfg['mu_c']*fm_loss
 
             adv_optim.zero_grad()
             task_optim.zero_grad()
@@ -446,7 +446,7 @@ def mdan_unif_fm_train_routine(model, optimizers, train_loader, valid_loaders, c
         log.print(level=1)
 
 
-def mixmdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
+def moda_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
     device = 'cuda:0' if (cfg['use_cuda'] and torch.cuda.is_available()) else 'cpu'
     beta = nn.Parameter(torch.Tensor(len(train_loader.sources)).to(device))
     nn.init.uniform_(beta)
@@ -488,7 +488,7 @@ def mixmdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
             alpha_grad_rev = grad_reverse_fn(alpha)
             mix_domain_loss = torch.sum(alpha_grad_rev * src_domain_losses) + tgt_domain_loss
             mix_class_loss = torch.sum(alpha * class_losses)
-            loss = mix_class_loss + cfg['mu']*mix_domain_loss + cfg['beta']*torch.sum(alpha**2)
+            loss = mix_class_loss + cfg['mu_d']*mix_domain_loss + cfg['mu_s']*torch.sum(alpha**2)
 
             optimizer.zero_grad()
             loss.backward()
@@ -566,7 +566,7 @@ def dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
 
             domain_loss = torch.mean(src_domain_losses) + tgt_domain_loss
             class_loss = torch.mean(class_losses)
-            loss = class_loss + cfg['mu']*domain_loss
+            loss = class_loss + cfg['mu_d']*domain_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -618,7 +618,7 @@ def dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
         log.print(level=1)
 
 
-def mixmdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
+def moda_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
     device = 'cuda:0' if (cfg['use_cuda'] and torch.cuda.is_available()) else 'cpu'
     beta = nn.Parameter(torch.Tensor(len(train_loader.sources)).to(device))
     nn.init.uniform_(beta)
@@ -677,7 +677,7 @@ def mixmdan_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
             alpha_grad_rev = grad_reverse_fn(alpha)
             mix_domain_loss = torch.sum(alpha_grad_rev * src_domain_losses) + tgt_domain_loss
             mix_class_loss = torch.sum(alpha * class_losses)
-            loss = mix_class_loss + cfg['mu']*mix_domain_loss + cfg['beta']*torch.sum(alpha**2) + cfg['lambda']*fm_loss
+            loss = mix_class_loss + cfg['mu_d']*mix_domain_loss + cfg['mu_s']*torch.sum(alpha**2) + cfg['mu_c']*fm_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -761,7 +761,7 @@ def fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
             class_losses = torch.stack([F.cross_entropy(ys_logits[j], ys[j]) for j in range(len(train_loader.sources))])
             fm_loss = fixmatch_loss(yt_logits, yt_aug_logits)
             mix_class_loss = torch.mean(class_losses)
-            loss = mix_class_loss + cfg['lambda']*fm_loss
+            loss = mix_class_loss + cfg['mu_c']*fm_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -838,7 +838,7 @@ def mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
             class_losses = torch.stack([F.cross_entropy(ys_logits[j], ys[j]) for j in range(len(train_loader.sources))])
             fm_loss = fixmatch_loss(yt_logits, yt_aug_logits)
             mix_class_loss = torch.mean(class_losses)
-            loss = mix_class_loss + cfg['lambda']*fm_loss
+            loss = mix_class_loss + cfg['mu_c']*fm_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -890,7 +890,7 @@ def mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
         log.print(level=1)
 
 
-def mixmdan_mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
+def moda_mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg):
     device = 'cuda:0' if (cfg['use_cuda'] and torch.cuda.is_available()) else 'cpu'
     alpha = nn.Parameter(torch.Tensor(len(train_loader.sources)).to(device))
     nn.init.uniform_(alpha)
@@ -931,7 +931,7 @@ def mixmdan_mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, 
             beta_grad_rev = grad_reverse_fn(beta)
             mix_domain_loss = torch.sum(beta_grad_rev * src_domain_losses) + tgt_domain_loss
             mix_class_loss = torch.sum(beta * class_losses)
-            loss = mix_class_loss + cfg['mu']*mix_domain_loss + cfg['beta']*torch.sum(beta**2) + cfg['lambda']*fm_loss
+            loss = mix_class_loss + cfg['mu_d']*mix_domain_loss + cfg['mu_s']*torch.sum(beta**2) + cfg['mu_c']*fm_loss
 
             optimizer.zero_grad()
             loss.backward()

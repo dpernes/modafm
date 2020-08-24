@@ -12,15 +12,15 @@ from torch import optim
 from torch.utils.data import Subset, DataLoader
 
 from dataset import Amazon
-from models import SimpleMLP, MDANet, MixMDANet
+from models import SimpleMLP, MDANet, MODANet
 from routines import (fs_train_routine, mlp_fm_train_routine, dann_train_routine, mdan_train_routine,
-                      mixmdan_train_routine, mixmdan_mlp_fm_train_routine)
+                      moda_train_routine, moda_mlp_fm_train_routine)
 from utils import MSDA_Loader, Logger
 
 
 def main():
     parser = argparse.ArgumentParser(description='Domain adaptation experiments with Amazon dataset.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-m', '--model', default='MDAN', type=str, metavar='', help='model type (\'MDAN\' / \'MDANU\' / \'MDANFM\' / \'MDANUFM\' / \'MixMDAN\' / \'MixMDANFM\')')
+    parser.add_argument('-m', '--model', default='MODAFM', type=str, metavar='', help='model type (\'FS\' / \'DANNS\' / \'DANNM\' / \'MDAN\' / \'MODA\' / \'FM\' / \'MODAFM\'')
     parser.add_argument('-d', '--data_path', default='/ctm-hdd-pool01/DB/Amazon', type=str, metavar='', help='data directory path')
     parser.add_argument('-t', '--target', default='books', type=str, metavar='', help='target domain (\'books\' / \'dvd\' / \'electronics\' / \'kitchen\')')
     parser.add_argument('-o', '--output', default='msda.pth', type=str, metavar='', help='model file (output of train)')
@@ -100,28 +100,28 @@ def main():
         mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
     elif cfg['model'] == 'DANNS':
         for src in train_loader.sources:
-            model = MixMDANet(input_dim=cfg['n_features'], n_classes=2).to(device)
+            model = MODANet(input_dim=cfg['n_features'], n_classes=2).to(device)
             optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
             dataset_ss = {src: datasets[src], cfg['target']: datasets[cfg['target']]}
             train_loader = MSDA_Loader(dataset_ss, cfg['target'], batch_size=cfg['batch_size'], shuffle=True, device=device)
             dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
             torch.save(model.state_dict(), cfg['output']+'_'+src)
     elif cfg['model'] == 'DANNM':
-        model = MixMDANet(input_dim=cfg['n_features'], n_classes=2).to(device)
+        model = MODANet(input_dim=cfg['n_features'], n_classes=2).to(device)
         optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
         dann_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
     elif cfg['model'] == 'MDAN':
         model = MDANet(input_dim=cfg['n_features'], n_classes=2, n_domains=len(train_loader.sources)).to(device)
         optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
         mdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
-    elif cfg['model'] == 'MixMDAN':
-        model = MixMDANet(input_dim=cfg['n_features'], n_classes=2).to(device)
+    elif cfg['model'] == 'MODA':
+        model = MODANet(input_dim=cfg['n_features'], n_classes=2).to(device)
         optimizer = optim.Adadelta(model.parameters(), lr=args['lr'], weight_decay=cfg['weight_decay'])
-        mixmdan_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
-    elif cfg['model'] == 'MixMDANFM':
-        model = MixMDANet(input_dim=cfg['n_features'], n_classes=2).to(device)
+        moda_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+    elif cfg['model'] == 'MODAFM':
+        model = MODANet(input_dim=cfg['n_features'], n_classes=2).to(device)
         optimizer = optim.Adadelta(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
-        mixmdan_mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
+        moda_mlp_fm_train_routine(model, optimizer, train_loader, valid_loaders, cfg)
 
     torch.save(model.state_dict(), cfg['output'])
 

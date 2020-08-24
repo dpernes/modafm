@@ -134,9 +134,9 @@ class MDANet(nn.Module):
         return y
 
 
-class MixMDANet(nn.Module):
+class MODANet(nn.Module):
     def __init__(self, n_classes, arch='resnet50'):
-        super(MixMDANet, self).__init__()
+        super(MODANet, self).__init__()
 
         if arch == 'resnet50':
             resnet_layers = dict(models.resnet50(pretrained=True).named_children())

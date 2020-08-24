@@ -82,7 +82,7 @@ class MDANet(nn.Module):
         return y
 
 
-class MixMDANet(nn.Module):
+class MODANet(nn.Module):
     def __init__(self, input_dim, n_classes, dropout_rate=0.):
         super(MixMDANet, self).__init__()
         self.feat_ext = nn.Sequential(OrderedDict([

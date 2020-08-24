@@ -16,20 +16,20 @@ import torchvision.transforms.functional as TF
 
 from dataset import Office
 from models import MDANet, MixMDANet
-from routines import mdan_train_routine, mixmdan_train_routine, mixmdan_fm_train_routine
+from routines import mdan_train_routine, moda_train_routine, moda_fm_train_routine
 from utils import MSDA_Loader, Logger, cross_validation
 
 
 def main():
     parser = argparse.ArgumentParser(description='Cross-validation over source domains for the Office dataset.', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('-m', '--model', default='MDAN', type=str, metavar='', help='model type (\'MDAN\' / \'MDANU\' / \'MDANFM\' / \'MDANUFM\' / \'MixMDAN\' / \'MixMDANFM\')')
+    parser.add_argument('-m', '--model', default='MODAFM', type=str, metavar='', help='model type (\'FS\' / \'DANNS\' / \'DANNM\' / \'MDAN\' / \'MODA\' / \'FM\' / \'MODAFM\'')
     parser.add_argument('-d', '--data_path', default='/ctm-hdd-pool01/DB/OfficeRsz', type=str, metavar='', help='data directory path')
     parser.add_argument('-t', '--target', default='amazon', type=str, metavar='', help='target domain (\'amazon\' / \'dslr\' / \'webcam\')')
     parser.add_argument('-o', '--output', default='cv_out.ini', type=str, metavar='', help='best hyperparameters (output of cross validation')
     parser.add_argument('-n', '--n_iter', default=20, type=int, metavar='', help='number of CV iterations')
-    parser.add_argument('--mu', type=float, default=1e-2, help="hyperparameter of the coefficient for the domain adversarial loss")
-    parser.add_argument('--beta', type=float, default=0.2, help="hyperparameter of the non-sparsity regularization")
-    parser.add_argument('--lambda', type=float, default=1e-1, help="hyperparameter of the FixMatch loss")
+    parser.add_argument('--mu_d', type=float, default=1e-2, help="hyperparameter of the coefficient for the domain discriminator loss")
+    parser.add_argument('--mu_s', type=float, default=0.2, help="hyperparameter of the non-sparsity regularization")
+    parser.add_argument('--mu_c', type=float, default=1e-1, help="hyperparameter of the FixMatch loss")
     parser.add_argument('--n_rand_aug', type=int, default=2, help="N parameter of RandAugment")
     parser.add_argument('--m_min_rand_aug', type=int, default=3, help="minimum M parameter of RandAugment")
     parser.add_argument('--m_max_rand_aug', type=int, default=10, help="maximum M parameter of RandAugment")
@@ -114,7 +114,7 @@ def main():
         cfg['param_groups'].append({'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']})
 
         cfg['train_routine'] = lambda model, optimizer, train_loader, cfg: mdan_train_routine(model, optimizer, train_loader, dict(), cfg)
-    elif cfg['model'] == 'MixMDAN':
+    elif cfg['model'] == 'MODA':
         model = MixMDANet(n_classes=n_classes).to(device)
         cfg['model'] = model
 
@@ -128,8 +128,8 @@ def main():
         cfg['param_groups'].append({'params':conv_params, 'lr':0.1*cfg['lr'], 'weight_decay':cfg['weight_decay']})
         cfg['param_groups'].append({'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']})
 
-        cfg['train_routine'] = lambda model, optimizer, train_loader, cfg: mixmdan_train_routine(model, optimizer, train_loader, dict(), cfg)
-    elif cfg['model'] == 'MixMDANFM':
+        cfg['train_routine'] = lambda model, optimizer, train_loader, cfg: moda_train_routine(model, optimizer, train_loader, dict(), cfg)
+    elif cfg['model'] == 'MODAFM':
         model = MixMDANet(n_classes=n_classes).to(device)
         cfg['model'] = model
 
@@ -144,7 +144,7 @@ def main():
         cfg['param_groups'].append({'params':fc_params, 'lr':cfg['lr'], 'weight_decay':cfg['weight_decay']})
 
         cfg['excl_transf'] = None
-        cfg['train_routine'] = lambda model, optimizer, train_loader, cfg: mixmdan_fm_train_routine(model, optimizer, train_loader, dict(), cfg)
+        cfg['train_routine'] = lambda model, optimizer, train_loader, cfg: moda_fm_train_routine(model, optimizer, train_loader, dict(), cfg)
     else:
         raise ValueError('Unknown model {}'.format(cfg['model']))
 

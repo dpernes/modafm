@@ -108,9 +108,9 @@ class MDANet(nn.Module):
         return y
 
 
-class MixMDANet(nn.Module):
+class MODANet(nn.Module):
     def __init__(self):
-        super(MixMDANet, self).__init__()
+        super(MODANet, self).__init__()
 
         self.feat_ext = nn.Sequential(OrderedDict([
             ('Conv1', nn.Conv2d(3, 64, kernel_size=3, padding=1)),
