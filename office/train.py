@@ -108,7 +108,7 @@ def main():
             valid_loaders = {'target pub': DataLoader(test_set, batch_size=3*cfg['batch_size'])}
         else:
             valid_loaders = None
-        log.print('target domain:', cfg['target'], 'source domains:', train_loader.sources, level=1)
+        log.print('target domain:', cfg['target'], '| source domains:', train_loader.sources, level=1)
     else:
         train_indices = random.sample(range(len(datasets[cfg['target']])), int(0.8*len(datasets[cfg['target']])))
         test_indices = list(set(range(len(datasets[cfg['target']]))) - set(train_indices))
